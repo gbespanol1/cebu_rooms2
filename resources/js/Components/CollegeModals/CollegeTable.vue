@@ -1,7 +1,7 @@
 <template>
   <div class="p-4 bg-white min-h-screen">
     <div class="max-w-7xl mx-auto">
-      <h6 class="font-bold text-l text-[#7A0C23] mt-4">College LIST 📃</h6>
+      <h6 class="font-bold text-l text-[#7A0C23] mt-4">College List 📃</h6>
 
       <!-- Add Button -->
   
@@ -10,13 +10,13 @@
         <IconButton 
           @click="handleAdd" 
           icon="plus" 
-          title="Add Building" 
+          title="Add College" 
           size="md" 
           color="green" 
           outlined
           class="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-yellow-500 transition-colors duration-200"
         >
-          Add Building
+          Add College
         </IconButton>
       </div>
 
