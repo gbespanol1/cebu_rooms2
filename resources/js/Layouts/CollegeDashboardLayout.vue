@@ -35,7 +35,7 @@ const toggleSidebar = () => {
         <div class="mb-6">
           <div class="flex justify-between items-start">
             <h1 class="text-xl md:text-2xl font-bold text-[#7A0C23]">
-              College Management 1
+              College Management
             </h1>
 
             <div class="text-sm text-gray-500">

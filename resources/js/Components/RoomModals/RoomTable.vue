@@ -10,13 +10,13 @@
         <IconButton 
           @click="handleAdd" 
           icon="plus" 
-          title="Add Building" 
+          title="Add Rooms" 
           size="md" 
           color="green" 
           outlined
           class="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-yellow-500 transition-colors duration-200"
         >
-          Add Building
+          Add Rooms
         </IconButton>
       </div>
 
