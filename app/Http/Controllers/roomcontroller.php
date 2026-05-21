@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreRoomRequest;
 use App\Http\Requests\UpdateRoomRequest;
+use App\Http\Resources\RoomListResource;
 use App\Http\Resources\RoomResource;
 use App\Models\Building;
 use App\Models\College;
@@ -43,9 +44,16 @@ class RoomController extends Controller
 
     public function apiIndex()
     {
-        $rooms = Room::with('roomType')->get();
+        $rooms = $this->roomService->getRoomsForApi();
 
         return RoomResource::collection($rooms);
+    }
+
+    public function apiShow($id)
+    {
+        $room = $this->roomService->getRoomById($id);
+
+        return new RoomListResource($room);
     }
 
     public function store(StoreRoomRequest $request)

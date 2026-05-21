@@ -17,6 +17,7 @@ Route::prefix('equipment')->group(function () {
 
 
 Route::prefix('v1')->group(function () {
-    Route::get('/rooms', [RoomController::class, 'apiIndex']);
+    Route::get('/room/list', [RoomController::class, 'apiIndex']);
+    Route::get('/room/list/{id}', [RoomController::class, 'apiShow']);
 });
 
