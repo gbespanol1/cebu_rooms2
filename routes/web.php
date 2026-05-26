@@ -82,6 +82,9 @@ Route::middleware(['auth.session'])->group(function () {
     });
     // Schedule Management
     Route::get('/Schedule', [ScheduleController::class, 'index'])->name('schedules.index');
+    Route::post('/Schedule', [ScheduleController::class, 'store'])->name('schedules.store');
+    Route::put('/Schedule/{schedule}', [ScheduleController::class, 'update'])->name('schedules.update');
+    Route::delete('/Schedule/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
 
     // Terms Management
     Route::get('/Terms', [TermController::class, 'index'])->name('terms.index');

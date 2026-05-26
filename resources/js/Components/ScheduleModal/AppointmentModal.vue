@@ -206,7 +206,8 @@ watch(() => props.editingEvent, (newEvent) => {
 
         appointmentForm.room = extProps.room || 'UG 114';
         appointmentForm.type = newEvent.list || 'Meeting';
-        appointmentForm.date = new Date(newEvent.start).toISOString().split('T')[0];
+        const _editStart = new Date(newEvent.start);
+        appointmentForm.date = `${_editStart.getFullYear()}-${String(_editStart.getMonth() + 1).padStart(2, '0')}-${String(_editStart.getDate()).padStart(2, '0')}`;
 
         if (!newEvent.allDay) {
             const startDate = new Date(newEvent.start);

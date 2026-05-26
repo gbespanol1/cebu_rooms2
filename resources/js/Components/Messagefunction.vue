@@ -30,13 +30,13 @@
     <transition name="toast">
       <div
         v-if="showEditSuccess"
-        class="bg-yellow-600 text-white px-5 py-4 rounded-lg shadow-lg flex items-center justify-between"
+        class="bg-green-600 text-white px-5 py-4 rounded-lg shadow-lg flex items-center justify-between"
       >
         <div class="flex items-center">
-          <IconButton icon="edit" size="sm" color="white" class="mr-3 hover:bg-yellow-700/20" />
+          <IconButton icon="edit" size="sm" color="white" class="mr-3 hover:bg-green-700/20" />
           <div>
             <p class="font-semibold">Successfully Updated!</p>
-            <p class="text-yellow-100 text-sm mt-0.5">
+            <p class="text-green-100 text-sm mt-0.5">
               <slot name="edit-message">{{ editMessage }}</slot>
             </p>
           </div>
@@ -46,7 +46,7 @@
           size="sm"
           color="white"
           @click="$emit('close-edit')"
-          class="hover:bg-yellow-700/30 ml-2"
+          class="hover:bg-green-700/30 ml-2"
         />
       </div>
     </transition>

@@ -68,7 +68,10 @@ const dateToTimeString = (date) => {
 const dateToDayString = (date) => {
     if (!date || isNaN(date)) return '';
     const d = new Date(date);
-    return d.toISOString().split('T')[0];
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 };
 
 const formatDay = (date) => {
@@ -117,7 +120,7 @@ const goToToday = () => {
     emit('update:date', today);
 };
 
-const handleDateClick = (date, hour = null, minute = null) => {
+const handleDateClick = (date, hour = null, minute = null, position = null) => {
     let exactDate = new Date(date);
 
     if (hour !== null && minute !== null) {
@@ -126,7 +129,7 @@ const handleDateClick = (date, hour = null, minute = null) => {
         exactDate.setHours(9, 0, 0, 0);
     }
 
-    emit('dateClicked', exactDate, hour, minute);
+    emit('dateClicked', exactDate, hour, minute, position);
 };
 
 const handleDayClick = (date) => {
@@ -247,6 +250,13 @@ const timeGridData = computed(() => {
             const eventDate = new Date(event.start);
             return dateToDayString(eventDate) === dayStr;
         });
+        const isWithinGridRange = (event) => {
+            const s = new Date(event.start);
+            const e = event.end ? new Date(event.end) : new Date(s.getTime() + 60 * 60000);
+            const startAbs = s.getHours() * 60 + s.getMinutes();
+            const endAbs = e.getHours() * 60 + e.getMinutes();
+            return endAbs > GRID_START_HOUR * 60 && startAbs < GRID_END_HOUR * 60;
+        };
 
         return {
             date: currentDate,
@@ -263,16 +273,20 @@ const timeGridData = computed(() => {
             }),
             isToday: dayStr === todayStr,
             allDayEvents: dayEvents.filter(e => e.allDay),
-            events: dayEvents.filter(e => !e.allDay),
+            events: dayEvents.filter(e => !e.allDay && isWithinGridRange(e)),
             isOccupied: dayEvents.length > 0
         };
     });
 });
 
+const GRID_START_HOUR = 6;
+const GRID_END_HOUR = 22;
+
 const hourSlots = computed(() => {
     const slots = [];
-    for (let h = 6; h < 22; h++) {
+    for (let h = GRID_START_HOUR; h <= GRID_END_HOUR; h++) {
         for (let m = 0; m < 60; m += 30) {
+            if (h === GRID_END_HOUR && m > 0) break;
             const time = new Date(0, 0, 0, h, m);
             slots.push({
                 hour: h,
@@ -292,19 +306,18 @@ const getTimeEventStyle = (event) => {
     const start = new Date(event.start);
     const end = event.end ? new Date(event.end) : new Date(start.getTime() + 60 * 60000);
 
-    const startHour = start.getHours();
-    const startMinute = start.getMinutes();
-    const endHour = end.getHours();
-    const endMinute = end.getMinutes();
+    const startAbs = start.getHours() * 60 + start.getMinutes();
+    const endAbs = end.getHours() * 60 + end.getMinutes();
+    const gridStartAbs = GRID_START_HOUR * 60;
+    const gridEndAbs = (GRID_END_HOUR) * 60;
 
-    const startMinutesFrom6AM = (startHour - 6) * 60 + startMinute;
-    const endMinutesFrom6AM = (endHour - 6) * 60 + endMinute;
-    const durationMinutes = Math.max(0, endMinutesFrom6AM - startMinutesFrom6AM);
+    const visibleStart = Math.max(startAbs, gridStartAbs);
+    const visibleEnd = Math.min(endAbs, gridEndAbs);
+    const visibleDuration = Math.max(0, visibleEnd - visibleStart);
 
     const pxPerMinute = 40 / 30;
-
-    const topPx = startMinutesFrom6AM * pxPerMinute;
-    const heightPx = Math.max(25, durationMinutes * pxPerMinute);
+    const topPx = (visibleStart - gridStartAbs) * pxPerMinute;
+    const heightPx = Math.max(25, visibleDuration * pxPerMinute);
 
     return {
         top: `${topPx}px`,

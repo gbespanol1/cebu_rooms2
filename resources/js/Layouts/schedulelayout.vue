@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed, watchEffect } from 'vue';
+import axios from 'axios';
+import { router } from '@inertiajs/vue3';
 
 // Core Components
 import Navbar from '@/Components/Navbar.vue';
@@ -15,6 +17,15 @@ import TimeGridView from '@/Components/ScheduleModal/TimeGridView.vue';
 import EventViewerModal from '@/Components/ScheduleModal/EventViewerModal.vue';
 import DayEventsViewerModal from '@/Components/ScheduleModal/DayEventsViewerModal.vue';
 import OccupancyCheckModal from '@/Components/ScheduleModal/OccupancyCheckModal.vue';
+import QuickCreatePopover from '@/Components/ScheduleModal/QuickCreatePopover.vue';
+
+const props = defineProps({
+    schedules: { type: Array, default: () => [] },
+    rooms: { type: Array, default: () => [] },
+    faculty: { type: Array, default: () => [] },
+    requesters: { type: Array, default: () => [] },
+    terms: { type: Array, default: () => [] },
+});
 
 // --- UTILITY FUNCTIONS ---
 const createDate = (dateStr, timeStr) => {
@@ -27,48 +38,55 @@ const createDate = (dateStr, timeStr) => {
     return new Date(y, M - 1, d);
 };
 
-const loadEventsFromStorage = () => {
-    const saved = localStorage.getItem('scheduleEvents');
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            return parsed.map(event => ({
-                ...event,
-                start: new Date(event.start),
-                end: event.end ? new Date(event.end) : null
-            }));
-        } catch (e) {
-            console.error('Failed to load events:', e);
-        }
-    }
-    return [
-        {
-            id: 1,
-            title: 'Class: CS 101',
-            list: 'Class',
-            allDay: false,
-            start: createDate('2025-11-15', '10:00'),
-            end: createDate('2025-11-15', '12:00'),
-            extendedProps: {
-                room: 'UG 114',
-                building: 'Engineering',
-                college: 'CompSci',
-                subject: 'Class: CS 101',
-                type: 'Class',
-                requester: 'Prof. John Smith',
-                description: 'Introduction to Computer Science'
-            }
-        }
-    ];
+const eventTypeFromDb = (type) => {
+    const map = { class: 'Class', meeting: 'Meeting', event: 'Event', other: 'Other type of activity' };
+    return map[type] || 'Other type of activity';
 };
 
-const saveEventsToStorage = (events) => {
-    const eventsToSave = events.map(event => ({
-        ...event,
-        start: event.start.toISOString(),
-        end: event.end ? event.end.toISOString() : null
-    }));
-    localStorage.setItem('scheduleEvents', JSON.stringify(eventsToSave));
+const fullName = (user) => {
+    if (!user) return '';
+    const parts = [user.first_name, user.middle_name, user.last_name].filter(Boolean);
+    return parts.length ? parts.join(' ') : (user.username || '');
+};
+
+const dbScheduleToEvent = (s) => {
+    const datePart = (s.date || '').slice(0, 10);
+    const start = createDate(datePart, (s.start_time || '00:00').slice(0, 5));
+    const end = createDate(datePart, (s.end_time || '00:00').slice(0, 5));
+    return {
+        id: s.id,
+        dbId: s.id,
+        title: s.event_title || 'Untitled',
+        list: eventTypeFromDb(s.event_type),
+        allDay: false,
+        start,
+        end,
+        extendedProps: {
+            room: s.room?.room_name || s.room?.room_code || 'N/A',
+            roomCode: s.room?.room_code || '',
+            building: s.room?.building?.building_name || 'N/A',
+            college: s.room?.college?.college_name || s.organizer || 'N/A',
+            subject: s.course_name || s.event_title || '',
+            courseCode: s.course_code || '',
+            type: eventTypeFromDb(s.event_type),
+            requester: s.requester_name || fullName(s.requester) || 'N/A',
+            description: s.description || '',
+            agenda: s.agenda || '',
+            organizer: s.organizer || '',
+            numberOfStudents: s.number_of_participants,
+            faculty: s.faculty_name || fullName(s.faculty) || '',
+            section: s.section || '',
+            equipment: Array.isArray(s.equipment_needed) ? s.equipment_needed : [],
+            additional: Array.isArray(s.additional_requirements) ? s.additional_requirements : [],
+            status: s.status || 'pending',
+            isRecurring: !!s.is_recurring,
+        },
+    };
+};
+
+const loadEventsFromProps = () => {
+    if (!Array.isArray(props.schedules)) return [];
+    return props.schedules.map(dbScheduleToEvent);
 };
 
 const dateToIsoDateString = (date) => {
@@ -166,8 +184,13 @@ const getAvailableSlotsForRoom = (room, date, events, durationHours = 1) => {
 };
 
 // --- CORE STATE ---
-const events = ref(loadEventsFromStorage());
-const availableRooms = ref(['UG 114', 'AVR 201', 'Lab 305', 'Main Conference Room']);
+const events = ref(loadEventsFromProps());
+const availableRooms = computed(() => {
+    const list = (props.rooms || [])
+        .map((r) => r.room_name || r.room_code)
+        .filter(Boolean);
+    return list.length > 0 ? list : ['UG 114', 'AVR 201', 'Lab 305', 'Main Conference Room'];
+});
 
 // Layout State
 const sidebarOpen = ref(true);
@@ -187,6 +210,14 @@ const modalState = ref({
     occupancy: { visible: false, data: null, callback: null },
     eventViewer: { visible: false, event: null },
     dayViewer: { visible: false, events: [], date: null }
+});
+
+// Quick-create popover state (Google Calendar style)
+const quickCreate = ref({
+    visible: false,
+    position: null,
+    date: null,
+    room: '',
 });
 
 // Toast State
@@ -279,48 +310,115 @@ const closeModal = (modalName) => {
 };
 
 // --- EVENT HANDLERS ---
-const handleAppointmentSuccess = (data) => {
-    const isEdit = !!modalState.value.appointment.editing;
-    const eventId = isEdit ? modalState.value.appointment.editing.id : nextEventId.value;
+const pad2 = (n) => String(n).padStart(2, '0');
+const fmtLocalDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtLocalTime = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+const fmtLocalDateTime = (d) => `${fmtLocalDate(d)} ${fmtLocalTime(d)}`;
 
-    // Final check for time conflicts
-    if (checkTimeSlotOccupancy(data.room, data.start, data.end, events.value, isEdit ? eventId : null)) {
-        alert('This time slot is now occupied. Please choose a different time.');
+const buildBackendPayload = (data) => {
+    const s = new Date(data.start);
+    const e = new Date(data.end);
+    return {
+        room: data.room,
+        type: data.type,
+        title: data.title,
+        date: fmtLocalDate(s),
+        startTime: fmtLocalTime(s),
+        endTime: fmtLocalTime(e),
+        start: fmtLocalDateTime(s),
+        end: fmtLocalDateTime(e),
+        numberParticipants: data.numberParticipants ?? null,
+        numberOfStudents: data.numberOfStudents ?? null,
+        deptOffice: data.deptOffice ?? '',
+        organization: data.organization ?? '',
+        description: data.description ?? '',
+        agenda: data.agenda ?? '',
+        requester: data.requester ?? '',
+        subject: data.subject ?? '',
+        section: data.section ?? '',
+        faculty: data.faculty ?? '',
+        organizer: data.organizer ?? '',
+        name: data.name ?? '',
+        tablesChairs: !!data.tablesChairs,
+        airConditioner: !!data.airConditioner,
+        whiteboard: !!data.whiteboard,
+        additionalInstructions: data.additionalInstructions ?? '',
+        recurring: !!data.recurring,
+    };
+};
+
+const formatTimeRange = (start, end) => {
+    const fmt = (d) => new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return `${fmt(start)} – ${fmt(end)}`;
+};
+
+const buildClientConflictMessage = (room, start, end, conflictEvent) => {
+    const date = new Date(start).toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const conflictTitle = conflictEvent?.title || conflictEvent?.extendedProps?.subject || 'an existing appointment';
+    const conflictRange = formatTimeRange(conflictEvent.start, conflictEvent.end);
+    return `Booking conflict: ${room} is already reserved on ${date} from ${conflictRange} for "${conflictTitle}". Please choose a different room or time.`;
+};
+
+const findRoomConflict = (room, startTime, endTime, eventsList, excludeEventId = null) => {
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    return eventsList.find(event => {
+        if (excludeEventId && event.id === excludeEventId) return false;
+        if (event.extendedProps?.room !== room) return false;
+        const eventStart = new Date(event.start);
+        const eventEnd = event.end ? new Date(event.end) : new Date(eventStart.getTime() + 60 * 60000);
+        return start < eventEnd && end > eventStart;
+    }) || null;
+};
+
+const handleAppointmentSuccess = async (data) => {
+    const editingEvent = modalState.value.appointment.editing;
+    const isEdit = !!editingEvent;
+    const eventIdForConflictCheck = isEdit ? editingEvent.id : null;
+
+    const conflictEvent = findRoomConflict(data.room, data.start, data.end, events.value, eventIdForConflictCheck);
+    if (conflictEvent) {
+        alert(buildClientConflictMessage(data.room, data.start, data.end, conflictEvent));
         openOccupancyModal(data.room, data.start, data.start.getHours(), data.start.getMinutes());
         return;
     }
 
-    // Create FullCalendar-style event object
-    const newEvent = {
-        id: eventId,
-        title: data.title,
-        list: data.type,
-        allDay: data.allDay,
-        start: data.start,
-        end: data.end,
-        extendedProps: extractExtendedProps(data),
-    };
+    const payload = buildBackendPayload(data);
 
-    if (isEdit) {
-        // Update existing event
-        const index = events.value.findIndex(e => e.id === eventId);
-        if (index !== -1) {
-            events.value[index] = newEvent;
+    try {
+        let savedSchedule;
+        if (isEdit && editingEvent.dbId) {
+            const res = await axios.put(`/Schedule/${editingEvent.dbId}`, payload);
+            savedSchedule = res.data.schedule;
+        } else {
+            const res = await axios.post('/Schedule', payload);
+            savedSchedule = res.data.schedule;
         }
-        triggerToast('edit');
-    } else {
-        // Add new event
-        events.value.push(newEvent);
-        triggerToast('create');
-    }
 
-    // Persist to localStorage
-    saveEventsToStorage(events.value);
-    closeModal('appointment');
+        const newEvent = dbScheduleToEvent(savedSchedule);
 
-    // If in calendar view, navigate to the event
-    if (currentView.value === 'calendar') {
-        selectEventInCalendar(newEvent);
+        if (isEdit) {
+            const index = events.value.findIndex((e) => e.id === editingEvent.id);
+            if (index !== -1) events.value[index] = newEvent;
+            triggerToast('edit');
+        } else {
+            events.value.push(newEvent);
+            triggerToast('create');
+        }
+
+        closeModal('appointment');
+
+        if (currentView.value === 'calendar') {
+            selectEventInCalendar(newEvent);
+        }
+    } catch (err) {
+        console.error('Failed to save appointment:', err);
+        const msg = err.response?.data?.message
+            || (err.response?.data?.errors && Object.values(err.response.data.errors).flat().join('\n'))
+            || 'Failed to save appointment. Please check the form and try again.';
+        alert(msg);
     }
 };
 
@@ -363,38 +461,93 @@ const handleEditEvent = (event) => {
     );
 };
 
-const handleDeleteEvent = (eventObject) => {
-    if (confirm(`Are you sure you want to delete: ${eventObject?.title}?`)) {
-        events.value = events.value.filter(e => e.id !== eventObject.id);
-        saveEventsToStorage(events.value);
+const handleDeleteEvent = async (eventObject) => {
+    if (!confirm(`Are you sure you want to delete: ${eventObject?.title}?`)) return;
+
+    try {
+        if (eventObject.dbId) {
+            await axios.delete(`/Schedule/${eventObject.dbId}`);
+        }
+        events.value = events.value.filter((e) => e.id !== eventObject.id);
         triggerToast('delete', eventObject?.title || 'Appointment');
 
-        if (modalState.value.eventViewer.visible && modalState.value.eventViewer.event?.id === eventObject.id) {
+        if (
+            modalState.value.eventViewer.visible
+            && modalState.value.eventViewer.event?.id === eventObject.id
+        ) {
             closeModal('eventViewer');
         }
+    } catch (err) {
+        console.error('Failed to delete appointment:', err);
+        alert('Failed to delete appointment. Please try again.');
     }
 };
 
-// Handle calendar cell click - NEW IMPROVED FLOW
-const handleDateClick = (date, hour = null, minute = null) => {
-    // Show room selection prompt
-    const selectedRoom = prompt(`Select a room for this appointment:\nAvailable rooms: ${availableRooms.value.join(', ')}`, availableRooms.value[0]);
+// Open the floating quick-create popover when a calendar cell is clicked
+const handleDateClick = (date, hour = null, minute = null, position = null) => {
+    quickCreate.value = {
+        visible: true,
+        position: position || { x: window.innerWidth / 2 - 170, y: window.innerHeight / 2 - 180 },
+        date: new Date(date),
+        room: availableRooms.value[0] || '',
+    };
+};
 
-    if (selectedRoom && availableRooms.value.includes(selectedRoom)) {
-        // Check occupancy first
-        openOccupancyModal(
-            selectedRoom,
-            date,
-            hour,
-            minute,
-            (appointmentData) => {
-                // This callback will be executed after occupancy check
-                openAppointmentModal(appointmentData);
-            }
-        );
-    } else if (selectedRoom !== null) {
-        alert('Invalid room selected. Please choose from available rooms.');
-    }
+const closeQuickCreate = () => {
+    quickCreate.value = { visible: false, position: null, date: null, room: '' };
+};
+
+const handleQuickCreateSave = (data) => {
+    const [sh, sm] = data.startTime.split(':').map(Number);
+    const [eh, em] = data.endTime.split(':').map(Number);
+
+    const startDt = new Date(data.date);
+    startDt.setHours(sh, sm, 0, 0);
+
+    const endDt = new Date(data.date);
+    endDt.setHours(eh, em, 0, 0);
+    if (endDt <= startDt) endDt.setDate(endDt.getDate() + 1);
+
+    const payload = {
+        title: data.title,
+        type: data.eventType,
+        room: data.room,
+        start: startDt,
+        end: endDt,
+        allDay: false,
+        deptOffice: '',
+        organization: '',
+        description: '',
+        agenda: data.eventType === 'Meeting' ? data.title : '',
+        subject: data.eventType === 'Class' ? data.title : '',
+        section: '',
+        faculty: '',
+        organizer: '',
+        name: '',
+        requester: '',
+        numberParticipants: null,
+        numberOfStudents: null,
+        tablesChairs: false,
+        airConditioner: false,
+        whiteboard: false,
+        additionalInstructions: '',
+        recurring: false,
+    };
+
+    closeQuickCreate();
+    handleAppointmentSuccess(payload);
+};
+
+const handleQuickCreateMoreOptions = (data) => {
+    const [sh, sm] = (data?.startTime || '09:00').split(':').map(Number);
+    const baseDate = data?.date || quickCreate.value.date || new Date();
+    closeQuickCreate();
+    openAppointmentModal({
+        selectedDate: dateToIsoDateString(baseDate),
+        initialRoom: data?.room || availableRooms.value[0] || '',
+        initialHour: sh,
+        initialMinute: sm,
+    });
 };
 
 const handleDirectAppointment = (room) => {
@@ -410,9 +563,9 @@ const selectEventInCalendar = (event) => {
     openEventViewer(event);
 };
 
-// Watch for changes and save
+// Reload events when fresh data arrives from the backend (e.g., after navigation)
 watchEffect(() => {
-    saveEventsToStorage(events.value);
+    events.value = loadEventsFromProps();
 });
 </script>
 
@@ -466,7 +619,7 @@ watchEffect(() => {
                     @update:date="(date) => currentCalendarDate = date"
                     @update:mode="(mode) => currentCalendarMode = mode" @dateClicked="handleDateClick"
                     @selectEvent="openEventViewer" @editEvent="handleEditEvent" @deleteEvent="handleDeleteEvent"
-                    @addAppointment="() => handleDirectAppointment(availableRooms.value[0])"
+                    @addAppointment="() => handleDirectAppointment(availableRooms[0])"
                     @dayClick="openDayEventsViewer" />
             </main>
         </div>
@@ -488,6 +641,17 @@ watchEffect(() => {
         <DayEventsViewerModal :is-visible="modalState.dayViewer.visible" :events="modalState.dayViewer.events"
             :date="modalState.dayViewer.date" @close="() => closeModal('dayViewer')" @view-event="openEventViewer"
             @edit-event="handleEditEvent" @delete-event="handleDeleteEvent"
-            @add-appointment="() => handleDirectAppointment(availableRooms.value[0])" />
+            @add-appointment="() => handleDirectAppointment(availableRooms[0])" />
+
+        <QuickCreatePopover
+            :is-visible="quickCreate.visible"
+            :position="quickCreate.position"
+            :initial-date="quickCreate.date"
+            :initial-room="quickCreate.room"
+            :rooms="availableRooms"
+            @close="closeQuickCreate"
+            @save="handleQuickCreateSave"
+            @more-options="handleQuickCreateMoreOptions"
+        />
     </div>
 </template>

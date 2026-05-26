@@ -107,7 +107,7 @@ const isTodayHeader = (day) => {
 };
 
 // Accurate time slot click handler
-const handleTimeSlotClick = (day, slot) => {
+const handleTimeSlotClick = (day, slot, clickEvent) => {
     if (isTimeSlotOccupied(day, slot)) {
         const overlappingEvents = getOverlappingEvents(day, slot);
         if (overlappingEvents.length > 0) {
@@ -120,7 +120,10 @@ const handleTimeSlotClick = (day, slot) => {
 
     const exactDate = new Date(day.date);
     exactDate.setHours(slot.hour, slot.minute, 0, 0);
-    emit('emitDateClick', exactDate, slot.hour, slot.minute);
+    const position = clickEvent
+        ? { x: clickEvent.clientX, y: clickEvent.clientY }
+        : null;
+    emit('emitDateClick', exactDate, slot.hour, slot.minute, position);
 };
 
 // Get occupancy tooltip text
@@ -142,14 +145,22 @@ const getOccupancyTooltip = (day, slot) => {
     return `Occupied at ${slot.hour.toString().padStart(2, '0')}:${slot.minute.toString().padStart(2, '0')}\n\n${eventsInfo}`;
 };
 
-// Format time for slot labels
+// Format a single time as "06:00 AM"
+const formatHHMM = (hour, minute) => {
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    let displayHour = hour % 12;
+    if (displayHour === 0) displayHour = 12;
+    const hh = String(displayHour).padStart(2, '0');
+    const mm = String(minute).padStart(2, '0');
+    return `${hh}:${mm} ${ampm}`;
+};
+
+// Format slot label as a 1-hour range, e.g. "06:00 AM - 07:00 AM"
 const formatSlotTime = (hour, minute) => {
-    const time = new Date(0, 0, 0, hour, minute);
-    return time.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-    });
+    let endHour = hour + 1;
+    let endMinute = minute;
+    if (endHour >= 24) endHour -= 24;
+    return `${formatHHMM(hour, minute)} - ${formatHHMM(endHour, endMinute)}`;
 };
 </script>
 
@@ -157,7 +168,7 @@ const formatSlotTime = (hour, minute) => {
     <div class="time-grid-view border border-yellow-300 rounded-lg shadow-lg bg-white">
         <!-- Header with day labels -->
         <div class="bg-[#7A0C23] flex border-b border-yellow-600">
-            <div class="w-20 shrink-0 bg-[#7A0C23]"></div>
+            <div class="w-40 shrink-0 bg-[#7A0C23]"></div>
             <div class="flex-grow grid" :style="`grid-template-columns: repeat(${daysToRender.length}, minmax(0, 1fr))`">
                 <div
                     v-for="(day, index) in daysToRender"
@@ -180,7 +191,7 @@ const formatSlotTime = (hour, minute) => {
 
         <!-- All Day Events Section -->
         <div class="bg-[#7A0C23] flex border-b border-yellow-600">
-            <div class="bg-[#7A0C23] w-20 shrink-0 border-r border-yellow-500 py-2 px-1 text-xs font-bold text-white flex items-center justify-center">
+            <div class="bg-[#7A0C23] w-40 shrink-0 border-r border-yellow-500 py-2 px-1 text-xs font-bold text-white flex items-center justify-center">
                 All Day
             </div>
             <div class="flex-grow grid" :style="`grid-template-columns: repeat(${daysToRender.length}, minmax(0, 1fr))`">
@@ -210,20 +221,23 @@ const formatSlotTime = (hour, minute) => {
         </div>
 
         <!-- Time Grid -->
-        <div class="flex h-[calc(100vh-300px)] overflow-y-auto relative">
+        <div class="flex h-[calc(100vh-300px)] overflow-y-auto relative bg-white">
             <!-- Time Labels (Left Side) -->
-            <div class="w-20 shrink-0 border-r border-yellow-500 bg-gray-800 sticky left-0 z-30">
+            <div class="w-40 shrink-0 border-r border-gray-200 bg-white sticky left-0 z-30">
                 <div class="relative w-full h-full">
                     <div
                         v-for="(slot, index) in hourSlots"
                         :key="index"
-                        class="bg-[#7A0C23] absolute w-full text-xs text-white text-right pr-2 border-b border-gray-700"
+                        class="absolute w-full text-[11px] text-center px-1 flex items-center justify-center"
                         :style="`top: ${index * 2.5}rem; height: 2.5rem;`"
                     >
-                        <!-- Show time label at 00 and 30 minutes -->
                         <span
-                            v-if="slot.minute === 0 || slot.minute === 30"
-                            class="absolute top-2 right-1 font-bold"
+                            :class="[
+                                'rounded-md px-2 py-0.5 border font-semibold whitespace-nowrap',
+                                slot.minute === 0
+                                    ? 'bg-red-50 border-red-300 text-[#7A0C23]'
+                                    : 'bg-red-50/60 border-red-200 text-[#7A0C23]/80'
+                            ]"
                         >
                             {{ formatSlotTime(slot.hour, slot.minute) }}
                         </span>
@@ -237,21 +251,23 @@ const formatSlotTime = (hour, minute) => {
                 <div
                     v-for="(day, dayIndex) in daysToRender"
                     :key="dayIndex"
-                    class="border-r border-yellow-500 last:border-r-0 relative"
+                    :class="[
+                        'border-r border-gray-200 last:border-r-0 relative',
+                        isTodayHeader(day) ? 'bg-blue-50/40' : 'bg-white'
+                    ]"
                 >
                     <!-- Time Slot Grid -->
                     <div
                         v-for="(slot, slotIndex) in hourSlots"
                         :key="slotIndex"
-                        @click="handleTimeSlotClick(day, slot)"
+                        @click="handleTimeSlotClick(day, slot, $event)"
                         :class="[
-                            'h-10 border-b border-gray-300 transition duration-100 cursor-pointer relative group',
+                            'h-10 transition duration-100 cursor-pointer relative group',
                             getOccupancyColor(day, slot),
-                            slot.minute === 0 ? 'border-t border-gray-400' : ''
+                            slot.minute === 0 ? 'border-t border-gray-200' : 'border-t border-dashed border-gray-100'
                         ]"
                         :title="getOccupancyTooltip(day, slot)"
                     >
-                        <!-- Occupied indicator -->
                         <div
                             v-if="isTimeSlotOccupied(day, slot)"
                             class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -261,12 +277,6 @@ const formatSlotTime = (hour, minute) => {
                                 Occupied
                             </div>
                         </div>
-
-                        <!-- Half-hour indicator -->
-                        <div
-                            v-if="slot.minute === 30"
-                            class="absolute top-0 left-0 right-0 border-t border-dashed border-gray-300"
-                        ></div>
                     </div>
 
                     <!-- Events -->
@@ -274,7 +284,7 @@ const formatSlotTime = (hour, minute) => {
                         v-for="event in day.events"
                         :key="event.id"
                         @click="emit('selectEvent', event)"
-                        class="absolute left-1 right-1 mx-0.5 p-2 rounded-md cursor-pointer text-white shadow-lg z-20 overflow-hidden border-l-4"
+                        class="absolute left-1 right-1 mx-0.5 p-2 rounded-md cursor-pointer text-white shadow-md z-20 overflow-hidden border-l-4"
                         :class="[getEventColor(event)]"
                         :style="props.getEventStyle(event)"
                         :title="`${props.formatEventTime(event)}: ${event.title || event.extendedProps?.subject} - ${event.extendedProps?.room || 'Unknown Room'}`"
