@@ -155,10 +155,14 @@ const formatHHMM = (hour, minute) => {
     return `${hh}:${mm} ${ampm}`;
 };
 
-// Format slot label as a 1-hour range, e.g. "06:00 AM - 07:00 AM"
+// Format slot label as a 30-minute range to match grid row height, e.g. "10:00 AM - 10:30 AM"
 const formatSlotTime = (hour, minute) => {
-    let endHour = hour + 1;
-    let endMinute = minute;
+    let endHour = hour;
+    let endMinute = minute + 30;
+    if (endMinute >= 60) {
+        endMinute -= 60;
+        endHour += 1;
+    }
     if (endHour >= 24) endHour -= 24;
     return `${formatHHMM(hour, minute)} - ${formatHHMM(endHour, endMinute)}`;
 };
@@ -229,7 +233,7 @@ const formatSlotTime = (hour, minute) => {
                         v-for="(slot, index) in hourSlots"
                         :key="index"
                         class="absolute w-full text-[11px] text-center px-1 flex items-center justify-center"
-                        :style="`top: ${index * 2.5}rem; height: 2.5rem;`"
+                        :style="`top: ${index * 3}rem; height: 3rem;`"
                     >
                         <span
                             :class="[
@@ -262,9 +266,9 @@ const formatSlotTime = (hour, minute) => {
                         :key="slotIndex"
                         @click="handleTimeSlotClick(day, slot, $event)"
                         :class="[
-                            'h-10 transition duration-100 cursor-pointer relative group',
+                            'h-12 transition duration-100 cursor-pointer relative group',
                             getOccupancyColor(day, slot),
-                            slot.minute === 0 ? 'border-t border-gray-200' : 'border-t border-dashed border-gray-100'
+                            slot.minute === 0 ? 'border-t-2 border-gray-300' : 'border-t border-dashed border-gray-200'
                         ]"
                         :title="getOccupancyTooltip(day, slot)"
                     >
@@ -284,7 +288,7 @@ const formatSlotTime = (hour, minute) => {
                         v-for="event in day.events"
                         :key="event.id"
                         @click="emit('selectEvent', event)"
-                        class="absolute left-1 right-1 mx-0.5 p-2 rounded-md cursor-pointer text-white shadow-md z-20 overflow-hidden border-l-4"
+                        class="absolute left-1 right-1 mx-0.5 px-2 py-1 rounded-lg cursor-pointer text-white shadow-md z-20 overflow-hidden border-l-4"
                         :class="[getEventColor(event)]"
                         :style="props.getEventStyle(event)"
                         :title="`${props.formatEventTime(event)}: ${event.title || event.extendedProps?.subject} - ${event.extendedProps?.room || 'Unknown Room'}`"

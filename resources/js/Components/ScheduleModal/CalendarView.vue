@@ -281,6 +281,8 @@ const timeGridData = computed(() => {
 
 const GRID_START_HOUR = 6;
 const GRID_END_HOUR = 22;
+const SLOT_HEIGHT_PX = 48; // must match TimeGridView row height (h-12)
+const EVENT_INSET_PX = 10; // shrink pill height so it sits inside the time block with visible gaps
 
 const hourSlots = computed(() => {
     const slots = [];
@@ -315,9 +317,10 @@ const getTimeEventStyle = (event) => {
     const visibleEnd = Math.min(endAbs, gridEndAbs);
     const visibleDuration = Math.max(0, visibleEnd - visibleStart);
 
-    const pxPerMinute = 40 / 30;
-    const topPx = (visibleStart - gridStartAbs) * pxPerMinute;
-    const heightPx = Math.max(25, visibleDuration * pxPerMinute);
+    const pxPerMinute = SLOT_HEIGHT_PX / 30;
+    const topPx = (visibleStart - gridStartAbs) * pxPerMinute + EVENT_INSET_PX;
+    const rawHeightPx = visibleDuration * pxPerMinute - EVENT_INSET_PX * 2;
+    const heightPx = Math.max(20, rawHeightPx);
 
     return {
         top: `${topPx}px`,

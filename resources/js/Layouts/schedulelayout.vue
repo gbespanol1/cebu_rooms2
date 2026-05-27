@@ -461,8 +461,37 @@ const handleEditEvent = (event) => {
     );
 };
 
-const handleDeleteEvent = async (eventObject) => {
-    if (!confirm(`Are you sure you want to delete: ${eventObject?.title}?`)) return;
+const deleteConfirm = ref({
+    visible: false,
+    event: null,
+    loading: false,
+    error: '',
+});
+
+const resetDeleteConfirmModal = () => {
+    deleteConfirm.value = { visible: false, event: null, loading: false, error: '' };
+};
+
+const closeDeleteConfirmModal = () => {
+    if (deleteConfirm.value.loading) return;
+    resetDeleteConfirmModal();
+};
+
+const handleDeleteEvent = (eventObject) => {
+    deleteConfirm.value = {
+        visible: true,
+        event: eventObject,
+        loading: false,
+        error: '',
+    };
+};
+
+const confirmDeleteEvent = async () => {
+    const eventObject = deleteConfirm.value.event;
+    if (!eventObject) return;
+
+    deleteConfirm.value.loading = true;
+    deleteConfirm.value.error = '';
 
     try {
         if (eventObject.dbId) {
@@ -477,9 +506,12 @@ const handleDeleteEvent = async (eventObject) => {
         ) {
             closeModal('eventViewer');
         }
+
+        resetDeleteConfirmModal();
     } catch (err) {
         console.error('Failed to delete appointment:', err);
-        alert('Failed to delete appointment. Please try again.');
+        deleteConfirm.value.loading = false;
+        deleteConfirm.value.error = 'Failed to delete appointment. Please try again.';
     }
 };
 
@@ -571,8 +603,14 @@ watchEffect(() => {
 
 <template>
     <div class="bg-gray-200 font-sans min-h-screen">
-        <MessageFunction :show-create-success="toastState.create" :show-edit-success="toastState.edit"
-            :show-delete-success="toastState.delete.visible" :deleted-room-name="toastState.delete.name" />
+        <MessageFunction
+            :show-create-success="toastState.create"
+            :show-edit-success="toastState.edit"
+            :show-delete-success="toastState.delete.visible"
+            :delete-message="toastState.delete.name
+                ? `${toastState.delete.name} has been deleted.`
+                : 'Successfully deleted!'"
+        />
 
         <Navbar @toggleSidebar="toggleSidebar" class="fixed top-0 left-0 right-0 z-30" />
 
@@ -653,5 +691,67 @@ watchEffect(() => {
             @save="handleQuickCreateSave"
             @more-options="handleQuickCreateMoreOptions"
         />
+
+        <!-- Delete confirmation modal -->
+        <div
+            v-if="deleteConfirm.visible"
+            class="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50"
+            @click.self="closeDeleteConfirmModal"
+        >
+            <div
+                class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+                @click.stop
+            >
+                <div class="bg-[#7A0C23] px-6 py-4">
+                    <h3 class="text-xl font-semibold text-white">Delete Appointment</h3>
+                </div>
+
+                <div class="p-6">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </div>
+
+                    <p class="text-center text-gray-700 mb-4">
+                        Are you sure you want to delete
+                        <strong class="text-[#7A0C23]">{{ deleteConfirm.event?.title }}</strong>?
+                    </p>
+
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                        <p class="text-sm text-yellow-700">
+                            This action cannot be undone. The appointment will be permanently removed.
+                        </p>
+                    </div>
+
+                    <p v-if="deleteConfirm.error" class="text-sm text-red-600 text-center mb-4">
+                        {{ deleteConfirm.error }}
+                    </p>
+
+                    <div class="flex justify-end gap-3 pt-2 border-t">
+                        <button
+                            type="button"
+                            class="px-4 py-2 rounded-lg font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50"
+                            :disabled="deleteConfirm.loading"
+                            @click="closeDeleteConfirmModal"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="px-4 py-2 rounded-lg font-medium text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50 flex items-center"
+                            :disabled="deleteConfirm.loading"
+                            @click="confirmDeleteEvent"
+                        >
+                            <span
+                                v-if="deleteConfirm.loading"
+                                class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"
+                            />
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>

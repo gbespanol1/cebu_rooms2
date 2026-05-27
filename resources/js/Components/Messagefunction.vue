@@ -55,13 +55,13 @@
     <transition name="toast">
       <div
         v-if="showDeleteSuccess"
-        class="bg-red-600 text-white px-5 py-4 rounded-lg shadow-lg flex items-center justify-between"
+        class="bg-green-600 text-white px-5 py-4 rounded-lg shadow-lg flex items-center justify-between"
       >
         <div class="flex items-center">
-          <IconButton icon="delete" size="sm" color="white" class="mr-3 hover:bg-red-700/20" />
+          <IconButton icon="check" size="sm" color="white" class="mr-3 hover:bg-green-700/20" />
           <div>
             <p class="font-semibold">Successfully Deleted!</p>
-            <p class="text-red-100 text-sm mt-0.5">
+            <p class="text-green-100 text-sm mt-0.5">
               <slot name="delete-message">{{ deleteMessage }}</slot>
             </p>
           </div>
@@ -71,7 +71,7 @@
           size="sm"
           color="white"
           @click="$emit('close-delete')"
-          class="hover:bg-red-700/30 ml-2"
+          class="hover:bg-green-700/30 ml-2"
         />
       </div>
     </transition>
