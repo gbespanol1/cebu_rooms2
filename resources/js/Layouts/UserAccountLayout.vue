@@ -25,6 +25,10 @@ const props = defineProps({
         type: Object,
         default: () => ({})
     },
+    canManageUsers: {
+        type: Boolean,
+        default: false
+    },
     pagination: {
         type: Object,
         default: () => ({})
@@ -71,11 +75,22 @@ const searchForm = useForm({
     account_status: props.filters.account_status || ''
 });
 
+const getCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+const parseResponseBody = async (response) => {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        return response.json();
+    }
+    const text = await response.text();
+    return { message: text || `Request failed with status ${response.status}` };
+};
+
 // --- Database Methods ---
 const fetchUsers = () => {
     isTableLoading.value = true;
 
-    searchForm.get(route('users.index'), {
+    searchForm.get(route('user-accounts.index'), {
         preserveState: true,
         preserveScroll: true,
         onFinish: () => {
@@ -110,13 +125,22 @@ const addUser = async (newUser) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'X-CSRF-TOKEN': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json'
             },
             body: JSON.stringify(formData)
         });
 
-        const result = await response.json();
+        const result = await parseResponseBody(response);
+
+        if (!response.ok) {
+            const serverError =
+                result?.message ||
+                (result?.errors && Object.values(result.errors).flat().join(', ')) ||
+                'Failed to create user';
+            return { success: false, error: serverError };
+        }
 
         if (result.success) {
             // Refresh the page to get updated user list
@@ -165,13 +189,22 @@ const updateUser = async (updatedUser) => {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'X-CSRF-TOKEN': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json'
             },
             body: JSON.stringify(formData)
         });
 
-        const result = await response.json();
+        const result = await parseResponseBody(response);
+
+        if (!response.ok) {
+            const serverError =
+                result?.message ||
+                (result?.errors && Object.values(result.errors).flat().join(', ')) ||
+                'Failed to update user';
+            return { success: false, error: serverError };
+        }
 
         if (result.success) {
             // Refresh the page to get updated user list
@@ -201,12 +234,21 @@ const deleteUser = async (userId) => {
         const response = await fetch(`/user-accounts/${userId}`, {
             method: 'DELETE',
             headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'X-CSRF-TOKEN': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
                 'Accept': 'application/json'
             }
         });
 
-        const result = await response.json();
+        const result = await parseResponseBody(response);
+
+        if (!response.ok) {
+            const serverError =
+                result?.message ||
+                (result?.errors && Object.values(result.errors).flat().join(', ')) ||
+                'Failed to delete user';
+            return { success: false, error: serverError };
+        }
 
         if (result.success) {
             // Refresh the page to get updated user list
@@ -231,6 +273,10 @@ const deleteUser = async (userId) => {
 
 // --- Event Handlers ---
 const handleOpenModal = (type, data = null) => {
+    if (!props.canManageUsers && type !== 'view') {
+        triggerError('Unauthorized. Only admins can manage user accounts.');
+        return;
+    }
     modalType.value = type;
     modalData.value = data;
     isModalVisible.value = true;
@@ -419,6 +465,7 @@ onMounted(() => {
                     :loading="isTableLoading"
                     :colleges="colleges"
                     :departments="departments"
+                    :can-manage-users="canManageUsers"
                     :show-all-data="showAllData"
                     @open-modal="handleOpenModal"
                     @search="fetchUsers"
@@ -434,6 +481,7 @@ onMounted(() => {
             :user="modalData"
             :colleges="colleges"
             :departments="departments"
+            :can-manage-users="canManageUsers"
             @close="handleCloseModal"
             @data-updated="handleDataUpdated"
         />

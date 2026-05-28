@@ -412,7 +412,7 @@ const tableEvents = computed(() => {
                             <td class="px-6 py-4 text-sm text-gray-700">
                                 <div class="flex items-center">
                                     <span>{{ item.time }}</span>
-                                    <span v-if="item.isOccupied" class="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                                    <span v-if="item.isOccupied" class="ml-2 text-xs bg-red-100 text-red-800 px-4 py-1 rounded-full min-w-[96px] inline-flex items-center justify-center">
                                         <FontAwesomeIcon :icon="listIcons.clock" class="w-3 h-3 mr-1" />
                                         Occupied
                                     </span>

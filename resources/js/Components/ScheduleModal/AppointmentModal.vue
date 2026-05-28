@@ -11,7 +11,10 @@ const props = defineProps({
     initialHour: { type: [Number, null], default: 9 },
     initialMinute: { type: [Number, null], default: 0 },
     editingEvent: { type: Object, default: null },
-    initialRoom: { type: String, default: 'UG 114' }
+    initialRoom: { type: String, default: 'UG 114' },
+    rooms: { type: Array, default: () => [] },
+    currentRequester: { type: String, default: '' },
+    roomEquipmentsMap: { type: Object, default: () => ({}) }
 });
 
 const emit = defineEmits(['close', 'success']);
@@ -39,6 +42,7 @@ const appointmentForm = reactive({
     tablesChairs: false,
     airConditioner: false,
     whiteboard: false,
+    selectedEquipments: [],
 
     // Type-specific fields
     agenda: '', // Meeting
@@ -58,6 +62,61 @@ const appointmentForm = reactive({
 
 // Time conflict warning
 const timeConflictWarning = ref('');
+const showRoomDropdown = ref(false);
+const roomQuery = ref('');
+const roomOptions = computed(() => (
+    Array.isArray(props.rooms) && props.rooms.length > 0
+        ? props.rooms
+        : ['UG 114']
+));
+
+const filteredRoomOptions = computed(() => {
+    const query = (roomQuery.value || '').toLowerCase().trim();
+    if (!query) return roomOptions.value;
+    return roomOptions.value.filter((room) => room.toLowerCase().includes(query));
+});
+
+const toggleRoomDropdown = () => {
+    if (!showRoomDropdown.value) {
+        roomQuery.value = '';
+    }
+    showRoomDropdown.value = !showRoomDropdown.value;
+};
+
+const openRoomDropdown = () => {
+    roomQuery.value = appointmentForm.room || '';
+    showRoomDropdown.value = true;
+};
+
+const selectRoom = (room) => {
+    appointmentForm.room = room;
+    roomQuery.value = room;
+    showRoomDropdown.value = false;
+    if (!props.editingEvent) {
+        applyRoomEquipmentDefaults(room);
+    }
+};
+
+const roomEquipmentOptions = ref([]);
+
+const getRoomEquipmentDefaults = (roomName) => {
+    const raw = props.roomEquipmentsMap?.[roomName]
+        || props.roomEquipmentsMap?.[String(roomName || '').toLowerCase()]
+        || [];
+    return Array.isArray(raw)
+        ? raw.map((item) => String(item).trim()).filter(Boolean)
+        : [];
+};
+
+const applyRoomEquipmentDefaults = (roomName) => {
+    const equipment = getRoomEquipmentDefaults(roomName);
+    roomEquipmentOptions.value = Array.from(new Set(equipment.map((item) => item.trim()).filter(Boolean)));
+    appointmentForm.selectedEquipments = [...roomEquipmentOptions.value];
+    const selectedLower = appointmentForm.selectedEquipments.map((item) => item.toLowerCase());
+    appointmentForm.tablesChairs = selectedLower.some((item) => item.includes('table') || item.includes('chair'));
+    appointmentForm.airConditioner = selectedLower.some((item) => item.includes('air'));
+    appointmentForm.whiteboard = selectedLower.some((item) => item.includes('whiteboard') || item.includes('white board'));
+};
 
 // --- Computed properties ---
 const convertTo24Hour = (hour, minute, ampm) => {
@@ -161,7 +220,7 @@ const getInitialFormState = () => ({
     title: '',
     organizer: '',
     name: '',
-    requester: '',
+    requester: props.currentRequester || '',
     subject: '',
     section: '',
     faculty: '',
@@ -174,6 +233,8 @@ watch(() => [props.selectedDate, props.initialHour, props.initialMinute, props.i
         Object.assign(appointmentForm, getInitialFormState());
         appointmentForm.date = newDate;
         appointmentForm.room = newRoom || 'UG 114';
+        appointmentForm.requester = props.currentRequester || '';
+        applyRoomEquipmentDefaults(appointmentForm.room);
 
         if (newHour !== null && newMinute !== null) {
             // Convert 24-hour to 12-hour format
@@ -244,8 +305,33 @@ watch(() => props.editingEvent, (newEvent) => {
         appointmentForm.numberOfStudents = extProps.numberOfStudents || null;
         appointmentForm.organizer = extProps.organizer || '';
         appointmentForm.name = extProps.name || '';
+
+        const roomDefaults = getRoomEquipmentDefaults(appointmentForm.room);
+        const eventEquipment = Array.isArray(extProps.equipment)
+            ? extProps.equipment.map((item) => String(item).trim()).filter(Boolean)
+            : [];
+        roomEquipmentOptions.value = Array.from(new Set([...roomDefaults, ...eventEquipment]));
+        appointmentForm.selectedEquipments = eventEquipment.length > 0 ? eventEquipment : [...roomDefaults];
     }
 }, { immediate: true });
+
+watch(() => props.currentRequester, (newRequester) => {
+    if (!props.editingEvent) {
+        appointmentForm.requester = newRequester || '';
+    }
+});
+
+watch(() => appointmentForm.room, (newRoom) => {
+    if (!newRoom || props.editingEvent) return;
+    applyRoomEquipmentDefaults(newRoom);
+});
+
+watch(() => appointmentForm.selectedEquipments, (list) => {
+    const values = Array.isArray(list) ? list.map((item) => String(item).toLowerCase()) : [];
+    appointmentForm.tablesChairs = values.some((item) => item.includes('table') || item.includes('chair'));
+    appointmentForm.airConditioner = values.some((item) => item.includes('air'));
+    appointmentForm.whiteboard = values.some((item) => item.includes('whiteboard') || item.includes('white board'));
+}, { deep: true });
 
 // --- Modal handlers ---
 const closeModal = () => emit('close');
@@ -315,8 +401,47 @@ const handleTimeChange = () => {
 <div v-if="isVisible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 max-h-screen overflow-y-auto">
         <div class="flex justify-between items-center mb-4 sticky top-0 bg-white z-10 p-1 -m-1">
-            <h3 class="text-xl font-bold">{{ appointmentForm.room }} {{ editingEvent ? '(Editing)' : '' }}</h3>
+            <h3 class="text-xl font-bold">Appointment {{ editingEvent ? '(Editing)' : '' }}</h3>
             <button @click="closeModal" class="text-xl font-semibold">X</button>
+        </div>
+
+        <div class="mb-4">
+            <label class="text-sm font-medium text-gray-700 block mb-1">Room</label>
+            <div class="relative" @focusout="() => setTimeout(() => (showRoomDropdown = false), 120)">
+                <input
+                    v-model="appointmentForm.room"
+                    type="text"
+                    class="border rounded-md p-2 pr-10 w-full"
+                    placeholder="Type or select a room"
+                    @focus="openRoomDropdown"
+                    @input="roomQuery = appointmentForm.room; openRoomDropdown()"
+                >
+                <button
+                    type="button"
+                    class="absolute inset-y-0 right-0 px-3 text-gray-500 bg-transparent border-0 shadow-none"
+                    @click="toggleRoomDropdown"
+                >
+                    ▼
+                </button>
+
+                <div
+                    v-if="showRoomDropdown"
+                    class="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg"
+                >
+                    <button
+                        v-for="room in filteredRoomOptions"
+                        :key="room"
+                        type="button"
+                        class="block w-full px-3 py-2 text-left hover:bg-gray-100"
+                        @click="selectRoom(room)"
+                    >
+                        {{ room }}
+                    </button>
+                    <div v-if="filteredRoomOptions.length === 0" class="px-3 py-2 text-sm text-gray-500">
+                        No matching rooms
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="mb-4">
@@ -469,19 +594,22 @@ const handleTimeChange = () => {
             <!-- Equipment Section -->
             <div class="mt-4">
                 <h5 class="text-sm font-semibold mb-2">Equipment</h5>
-                <div class="flex flex-col space-y-2">
-                    <div class="flex justify-between items-center">
-                        <label class="text-sm font-medium text-gray-700">Tables and chairs</label>
-                        <input type="checkbox" v-model="appointmentForm.tablesChairs">
+                <div v-if="roomEquipmentOptions.length > 0" class="flex flex-col space-y-2">
+                    <div
+                        v-for="equipment in roomEquipmentOptions"
+                        :key="equipment"
+                        class="flex justify-between items-center"
+                    >
+                        <label class="text-sm font-medium text-gray-700 capitalize">{{ equipment }}</label>
+                        <input type="checkbox" :value="equipment" v-model="appointmentForm.selectedEquipments">
                     </div>
-                    <div class="flex justify-between items-center">
-                        <label class="text-sm font-medium text-gray-700">Air conditioner</label>
-                        <input type="checkbox" v-model="appointmentForm.airConditioner">
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <label class="text-sm font-medium text-gray-700">Whiteboard</label>
-                        <input type="checkbox" v-model="appointmentForm.whiteboard">
-                    </div>
+                </div>
+                <p v-else class="text-sm text-gray-500">
+                    No equipment configured for this room yet.
+                </p>
+                <input type="hidden" :value="appointmentForm.selectedEquipments.join(',')">
+                <div class="hidden">
+                    {{ appointmentForm.tablesChairs }}{{ appointmentForm.airConditioner }}{{ appointmentForm.whiteboard }}
                 </div>
             </div>
 

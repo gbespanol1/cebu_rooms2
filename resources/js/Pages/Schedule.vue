@@ -6,6 +6,7 @@ defineProps({
     rooms: { type: Array, default: () => [] },
     faculty: { type: Array, default: () => [] },
     requesters: { type: Array, default: () => [] },
+    currentRequester: { type: String, default: '' },
     terms: { type: Array, default: () => [] },
 });
 </script>
@@ -16,6 +17,7 @@ defineProps({
         :rooms="rooms"
         :faculty="faculty"
         :requesters="requesters"
+        :current-requester="currentRequester"
         :terms="terms"
     />
 </template>

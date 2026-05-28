@@ -21,6 +21,10 @@ const props = defineProps({
     departments: {
         type: Array,
         default: () => []
+    },
+    canManageUsers: {
+        type: Boolean,
+        default: false
     }
 });
 
@@ -163,6 +167,7 @@ const isAdd = computed(() => props.type === 'add');
 const isEdit = computed(() => props.type === 'edit');
 const isEditOrAdd = computed(() => props.type === 'edit' || props.type === 'add');
 const isDelete = computed(() => props.type === 'delete');
+const isReadonlyForAction = computed(() => !props.canManageUsers && (isAdd.value || isEdit.value || isDelete.value));
 
 // Check if password is required
 const isPasswordRequired = computed(() => isAdd.value || (isEdit.value && passwordField.value));
@@ -204,14 +209,14 @@ const validateForm = () => {
     if (isAdd.value) {
         if (!passwordField.value) {
             formErrors.value.password = 'Password is required';
-        } else if (passwordField.value.length < 6) {
-            formErrors.value.password = 'Password must be at least 6 characters';
+        } else if (passwordField.value.length < 8) {
+            formErrors.value.password = 'Password must be at least 8 characters';
         } else if (passwordField.value !== confirmPassword.value) {
             formErrors.value.confirmPassword = 'Passwords do not match';
         }
     } else if (isEdit.value && passwordField.value) {
-        if (passwordField.value.length < 6) {
-            formErrors.value.password = 'Password must be at least 6 characters';
+        if (passwordField.value.length < 8) {
+            formErrors.value.password = 'Password must be at least 8 characters';
         } else if (passwordField.value !== confirmPassword.value) {
             formErrors.value.confirmPassword = 'Passwords do not match';
         }
@@ -336,6 +341,13 @@ onMounted(() => {
                     </div>
                 </div>
 
+                <div
+                    v-if="isReadonlyForAction"
+                    class="mb-4 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800"
+                >
+                    You do not have permission to manage user accounts.
+                </div>
+
                 <!-- Raw Data View -->
                 <div v-if="isView && user && showRawData" class="mb-6">
                     <h4 class="font-semibold text-lg text-gray-700 mb-3">Raw Database Data</h4>
@@ -436,7 +448,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Add/Edit Form -->
-                <form v-else-if="isEditOrAdd" @submit.prevent="handleSubmit" class="space-y-6">
+                <form v-else-if="isEditOrAdd && !isReadonlyForAction" @submit.prevent="handleSubmit" class="space-y-6">
                     <!-- Name Fields -->
                     <div class="grid grid-cols-2 gap-4">
                         <div>
@@ -641,7 +653,7 @@ onMounted(() => {
                 </form>
 
                 <!-- Delete Confirmation -->
-                <div v-else-if="isDelete && user" class="space-y-4">
+                <div v-else-if="isDelete && user && !isReadonlyForAction" class="space-y-4">
                     <div class="text-center">
                         <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -681,6 +693,14 @@ onMounted(() => {
                             Delete Permanently
                         </button>
                     </div>
+                </div>
+
+                <div v-else-if="isReadonlyForAction" class="mt-6 pt-4 border-t flex justify-end">
+                    <button @click="emit('close')"
+                            class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition"
+                            :disabled="isLoading">
+                        Close
+                    </button>
                 </div>
 
             </div>

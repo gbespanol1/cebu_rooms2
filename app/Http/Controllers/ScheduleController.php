@@ -19,16 +19,29 @@ class ScheduleController extends Controller
             ->orderBy('start_time', 'desc')
             ->get();
 
-        $rooms = Room::where('status', 'available')->get();
+        $rooms = Room::orderBy('room_name')->get();
         $faculty = UserAccount::where('user_type', 'faculty')->get();
         $requesters = UserAccount::whereIn('user_type', ['faculty', 'staff'])->get();
         $terms = Term::where('status', 'active')->get();
+
+        $sessionUsername = data_get($request->session()->get('user'), 'username');
+        $currentUser = $sessionUsername
+            ? UserAccount::where('username', $sessionUsername)->first()
+            : null;
+        $currentRequester = $currentUser
+            ? trim(implode(' ', array_filter([
+                $currentUser->first_name,
+                $currentUser->middle_name,
+                $currentUser->last_name,
+            ])))
+            : ($sessionUsername ?: '');
 
         return Inertia::render('Schedule', [
             'schedules' => $schedules,
             'rooms' => $rooms,
             'faculty' => $faculty,
             'requesters' => $requesters,
+            'currentRequester' => $currentRequester,
             'terms' => $terms,
         ]);
     }
@@ -138,6 +151,8 @@ class ScheduleController extends Controller
             'tablesChairs' => 'nullable|boolean',
             'airConditioner' => 'nullable|boolean',
             'whiteboard' => 'nullable|boolean',
+            'equipmentNeeded' => 'nullable|array',
+            'equipmentNeeded.*' => 'string|max:255',
             'additionalInstructions' => 'nullable|string',
             'recurring' => 'nullable|boolean',
         ]);
@@ -157,9 +172,16 @@ class ScheduleController extends Controller
         ];
 
         $equipment = [];
-        if ($request->boolean('tablesChairs')) $equipment[] = 'Tables and chairs';
-        if ($request->boolean('airConditioner')) $equipment[] = 'Air conditioner';
-        if ($request->boolean('whiteboard')) $equipment[] = 'Whiteboard';
+        if (!empty($validated['equipmentNeeded']) && is_array($validated['equipmentNeeded'])) {
+            $equipment = array_values(array_filter(array_map(
+                fn($item) => trim((string) $item),
+                $validated['equipmentNeeded']
+            )));
+        } else {
+            if ($request->boolean('tablesChairs')) $equipment[] = 'Tables and chairs';
+            if ($request->boolean('airConditioner')) $equipment[] = 'Air conditioner';
+            if ($request->boolean('whiteboard')) $equipment[] = 'Whiteboard';
+        }
 
         $additional = [];
         if (!empty($validated['additionalInstructions'])) {

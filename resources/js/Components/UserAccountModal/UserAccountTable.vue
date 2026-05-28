@@ -18,6 +18,10 @@ const props = defineProps({
     departments: {
         type: Array,
         default: () => []
+    },
+    canManageUsers: {
+        type: Boolean,
+        default: false
     }
 });
 
@@ -61,6 +65,25 @@ const paginatedUsers = computed(() => {
 // --- Pagination Computed ---
 const totalPages = computed(() => {
     return Math.ceil(filteredUsers.value.length / itemsPerPage.value);
+});
+
+const visiblePages = computed(() => {
+    const total = totalPages.value;
+    const current = currentPage.value;
+
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, i) => i + 1);
+    }
+
+    if (current <= 4) {
+        return [1, 2, 3, 4, 5, '...', total];
+    }
+
+    if (current >= total - 3) {
+        return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+    }
+
+    return [1, '...', current - 1, current, current + 1, '...', total];
 });
 
 const showingRange = computed(() => {
@@ -190,18 +213,18 @@ onMounted(() => {
 
            
             
-          <!-- Add Button - Changed to yellow -->
-       <div class="pt-7 mb-3 flex justify-end">
+          <!-- Add User Button -->
+      <div v-if="canManageUsers" class="pt-7 mb-3 flex justify-end">
         <IconButton 
-          @click="handleAdd" 
+          @click="handleAddAccount" 
           icon="plus" 
-          title="Add Building" 
+          title="Add User" 
           size="md" 
           color="green" 
           outlined
           class="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-yellow-500 transition-colors duration-200"
         >
-          Add Building
+          Add User
         </IconButton>
       </div>
         </div>
@@ -263,24 +286,26 @@ onMounted(() => {
                                     color="blue"
                                     class="hover:scale-110 transition-transform"
                                 />
-                                <!-- Edit Button using IconButton -->
-                                <IconButton
-                                    @click="handleEdit(user)"
-                                    icon="edit"
-                                    title="Edit User"
-                                    size="sm"
-                                    color="green"
-                                    class="hover:scale-110 transition-transform"
-                                />
-                                <!-- Delete Button using IconButton -->
-                                <IconButton
-                                    @click="handleDelete(user)"
-                                    icon="delete"
-                                    title="Delete User"
-                                    size="sm"
-                                    color="red"
-                                    class="hover:scale-110 transition-transform"
-                                />
+                                <template v-if="canManageUsers">
+                                    <!-- Edit Button using IconButton -->
+                                    <IconButton
+                                        @click="handleEdit(user)"
+                                        icon="edit"
+                                        title="Edit User"
+                                        size="sm"
+                                        color="green"
+                                        class="hover:scale-110 transition-transform"
+                                    />
+                                    <!-- Delete Button using IconButton -->
+                                    <IconButton
+                                        @click="handleDelete(user)"
+                                        icon="delete"
+                                        title="Delete User"
+                                        size="sm"
+                                        color="red"
+                                        class="hover:scale-110 transition-transform"
+                                    />
+                                </template>
                             </td>
                         </tr>
                         <tr v-if="filteredUsers.length === 0 && !loading">
@@ -288,6 +313,7 @@ onMounted(() => {
                                 <div v-if="props.users.length === 0">
                                     No users found in the database.
                                     <button
+                                        v-if="canManageUsers"
                                         @click="handleAddAccount"
                                         class="text-blue-600 hover:text-blue-800 underline ml-2"
                                     >
@@ -308,8 +334,8 @@ onMounted(() => {
                 <div class="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
 
                     <!-- Showing range -->
-                    <div class="text-sm text-gray-600">
-                        Showing {{ showingRange.start }} to {{ showingRange.end }} of {{ showingRange.total }} entries
+                    <div class="text-sm text-gray-600 font-medium">
+                        Showing {{ showingRange.start }}-{{ showingRange.end }} of {{ showingRange.total }} users
                     </div>
 
                     <!-- Items per page selector -->
@@ -352,19 +378,26 @@ onMounted(() => {
 
                         <!-- Page numbers -->
                         <div class="flex items-center space-x-1">
-                            <button
-                                v-for="page in totalPages"
-                                :key="page"
-                                @click="goToPage(page)"
-                                :class="[
-                                    'px-3 py-1.5 rounded border text-sm font-medium min-w-[36px] transition-colors duration-150',
-                                    currentPage === page
-                                        ? 'bg-[#7A0C23] text-white border-[#7A0C23]'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                ]"
-                            >
-                                {{ page }}
-                            </button>
+                            <template v-for="(page, index) in visiblePages" :key="`${page}-${index}`">
+                                <button
+                                    v-if="page !== '...'"
+                                    @click="goToPage(page)"
+                                    :class="[
+                                        'px-3 py-1.5 rounded border text-sm font-medium min-w-[36px] transition-colors duration-150',
+                                        currentPage === page
+                                            ? 'bg-[#7A0C23] text-white border-[#7A0C23]'
+                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                    ]"
+                                >
+                                    {{ page }}
+                                </button>
+                                <span
+                                    v-else
+                                    class="px-2 text-gray-500 text-sm"
+                                >
+                                    ...
+                                </span>
+                            </template>
                         </div>
 
                         <!-- Next button using IconButton -->
@@ -396,8 +429,7 @@ onMounted(() => {
                 <!-- Results summary -->
                 <div class="mt-4 pt-3 border-t border-gray-300 text-center">
                     <p class="text-sm text-gray-500">
-                        Filtered Results: <span class="font-semibold text-[#7A0C23]">{{ filteredUsers.length }}</span>
-                        | Total Users in Database: <span class="font-semibold text-[#7A0C23]">{{ users.length }}</span>
+                        Total Users in Database: <span class="font-semibold text-[#7A0C23]">{{ users.length }}</span>
                     </p>
                 </div>
             </div>

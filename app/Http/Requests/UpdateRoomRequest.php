@@ -41,7 +41,7 @@ class UpdateRoomRequest extends FormRequest
             'location'          => 'nullable|string|max:255',
             'capacity'          => 'required|integer|min:1',
             'description'       => 'nullable|string',
-            'equipments'        => 'nullable|string',
+            'equipments'        => 'nullable',
         ];
     }
 }

@@ -15,15 +15,13 @@ import TableComponent from '@/Components/ScheduleModal/TableComponent.vue';
 import MonthGridView from '@/Components/ScheduleModal/MonthGridView.vue';
 import TimeGridView from '@/Components/ScheduleModal/TimeGridView.vue';
 import EventViewerModal from '@/Components/ScheduleModal/EventViewerModal.vue';
-import DayEventsViewerModal from '@/Components/ScheduleModal/DayEventsViewerModal.vue';
-import OccupancyCheckModal from '@/Components/ScheduleModal/OccupancyCheckModal.vue';
-import QuickCreatePopover from '@/Components/ScheduleModal/QuickCreatePopover.vue';
 
 const props = defineProps({
     schedules: { type: Array, default: () => [] },
     rooms: { type: Array, default: () => [] },
     faculty: { type: Array, default: () => [] },
     requesters: { type: Array, default: () => [] },
+    currentRequester: { type: String, default: '' },
     terms: { type: Array, default: () => [] },
 });
 
@@ -49,10 +47,36 @@ const fullName = (user) => {
     return parts.length ? parts.join(' ') : (user.username || '');
 };
 
+const parseRoomEquipments = (equipments) => {
+    if (!equipments) return [];
+    if (Array.isArray(equipments)) return equipments;
+
+    if (typeof equipments === 'string') {
+        const trimmed = equipments.trim();
+        if (!trimmed) return [];
+
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed;
+        } catch (_) {
+            // Fall back to splitting by common separators.
+        }
+
+        return trimmed
+            .split(/[\n,;]+/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+    }
+
+    return [];
+};
+
 const dbScheduleToEvent = (s) => {
     const datePart = (s.date || '').slice(0, 10);
     const start = createDate(datePart, (s.start_time || '00:00').slice(0, 5));
     const end = createDate(datePart, (s.end_time || '00:00').slice(0, 5));
+    const roomDefaultEquipment = parseRoomEquipments(s.room?.equipments);
+    const scheduleEquipment = Array.isArray(s.equipment_needed) ? s.equipment_needed : [];
     return {
         id: s.id,
         dbId: s.id,
@@ -76,7 +100,7 @@ const dbScheduleToEvent = (s) => {
             numberOfStudents: s.number_of_participants,
             faculty: s.faculty_name || fullName(s.faculty) || '',
             section: s.section || '',
-            equipment: Array.isArray(s.equipment_needed) ? s.equipment_needed : [],
+            equipment: scheduleEquipment.length > 0 ? scheduleEquipment : roomDefaultEquipment,
             additional: Array.isArray(s.additional_requirements) ? s.additional_requirements : [],
             status: s.status || 'pending',
             isRecurring: !!s.is_recurring,
@@ -192,6 +216,20 @@ const availableRooms = computed(() => {
     return list.length > 0 ? list : ['UG 114', 'AVR 201', 'Lab 305', 'Main Conference Room'];
 });
 
+const roomEquipmentsMap = computed(() => {
+    const map = {};
+    (props.rooms || []).forEach((room) => {
+        const parsed = parseRoomEquipments(room?.equipments);
+        if (!parsed.length) return;
+
+        if (room?.room_name) map[room.room_name] = parsed;
+        if (room?.room_code) map[room.room_code] = parsed;
+        if (room?.room_name) map[String(room.room_name).toLowerCase()] = parsed;
+        if (room?.room_code) map[String(room.room_code).toLowerCase()] = parsed;
+    });
+    return map;
+});
+
 // Layout State
 const sidebarOpen = ref(true);
 const currentView = ref('table');
@@ -207,17 +245,7 @@ const nextEventId = computed(() =>
 // Modal States
 const modalState = ref({
     appointment: { visible: false, data: null, editing: null },
-    occupancy: { visible: false, data: null, callback: null },
-    eventViewer: { visible: false, event: null },
-    dayViewer: { visible: false, events: [], date: null }
-});
-
-// Quick-create popover state (Google Calendar style)
-const quickCreate = ref({
-    visible: false,
-    position: null,
-    date: null,
-    room: '',
+    eventViewer: { visible: false, event: null }
 });
 
 // Toast State
@@ -225,6 +253,14 @@ const toastState = ref({
     create: false,
     edit: false,
     delete: { visible: false, name: '' }
+});
+const conflictNotice = ref({
+    visible: false,
+    room: '',
+    date: '',
+    requestedRange: '',
+    conflictTitle: '',
+    conflictRange: ''
 });
 
 // --- UTILITY FUNCTIONS ---
@@ -238,6 +274,17 @@ const triggerToast = (type, name = '') => {
     setTimeout(() => {
         toastState.value = { create: false, edit: false, delete: { visible: false, name: '' } };
     }, 3000);
+};
+
+const closeConflictNoticeModal = () => {
+    conflictNotice.value = {
+        visible: false,
+        room: '',
+        date: '',
+        requestedRange: '',
+        conflictTitle: '',
+        conflictRange: ''
+    };
 };
 
 // --- MODAL CONTROLLERS ---
@@ -254,48 +301,8 @@ const openAppointmentModal = (data = null, editing = null) => {
     };
 };
 
-const openOccupancyModal = (room, date, hour = null, minute = null, callback = null) => {
-    const targetDate = new Date(date);
-    if (hour !== null && minute !== null) {
-        targetDate.setHours(hour, minute, 0, 0);
-    }
-
-    const existingEvents = events.value.filter(event => {
-        const eventDate = dateToIsoDateString(new Date(event.start));
-        const targetDateStr = dateToIsoDateString(targetDate);
-        return event.extendedProps?.room === room && eventDate === targetDateStr;
-    });
-
-    modalState.value.occupancy = {
-        visible: true,
-        data: {
-            room,
-            date: targetDate,
-            selectedHour: hour,
-            selectedMinute: minute,
-            existingEvents,
-            availableSlots: getAvailableSlotsForRoom(room, targetDate, events.value)
-        },
-        callback: callback || (() => openAppointmentModal({
-            selectedDate: dateToIsoDateString(targetDate),
-            initialRoom: room,
-            initialHour: hour,
-            initialMinute: minute
-        }))
-    };
-};
-
 const openEventViewer = (event) => {
     modalState.value.eventViewer = { visible: true, event };
-};
-
-const openDayEventsViewer = (date) => {
-    const dayStr = dateToIsoDateString(date);
-    const dayEvents = events.value.filter(event => {
-        const eventDate = dateToIsoDateString(new Date(event.start));
-        return eventDate === dayStr;
-    });
-    modalState.value.dayViewer = { visible: true, events: dayEvents, date };
 };
 
 const closeModal = (modalName) => {
@@ -342,6 +349,7 @@ const buildBackendPayload = (data) => {
         tablesChairs: !!data.tablesChairs,
         airConditioner: !!data.airConditioner,
         whiteboard: !!data.whiteboard,
+        equipmentNeeded: Array.isArray(data.selectedEquipments) ? data.selectedEquipments : [],
         additionalInstructions: data.additionalInstructions ?? '',
         recurring: !!data.recurring,
     };
@@ -352,13 +360,15 @@ const formatTimeRange = (start, end) => {
     return `${fmt(start)} – ${fmt(end)}`;
 };
 
-const buildClientConflictMessage = (room, start, end, conflictEvent) => {
-    const date = new Date(start).toLocaleDateString('en-US', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    });
-    const conflictTitle = conflictEvent?.title || conflictEvent?.extendedProps?.subject || 'an existing appointment';
-    const conflictRange = formatTimeRange(conflictEvent.start, conflictEvent.end);
-    return `Booking conflict: ${room} is already reserved on ${date} from ${conflictRange} for "${conflictTitle}". Please choose a different room or time.`;
+const showConflictNotice = (room, start, end, conflictEvent) => {
+    conflictNotice.value = {
+        visible: true,
+        room,
+        date: formatDateDisplay(start),
+        requestedRange: formatTimeRange(start, end),
+        conflictTitle: conflictEvent?.title || conflictEvent?.extendedProps?.subject || 'Existing appointment',
+        conflictRange: formatTimeRange(conflictEvent.start, conflictEvent.end),
+    };
 };
 
 const findRoomConflict = (room, startTime, endTime, eventsList, excludeEventId = null) => {
@@ -380,8 +390,13 @@ const handleAppointmentSuccess = async (data) => {
 
     const conflictEvent = findRoomConflict(data.room, data.start, data.end, events.value, eventIdForConflictCheck);
     if (conflictEvent) {
-        alert(buildClientConflictMessage(data.room, data.start, data.end, conflictEvent));
-        openOccupancyModal(data.room, data.start, data.start.getHours(), data.start.getMinutes());
+        showConflictNotice(data.room, data.start, data.end, conflictEvent);
+        openAppointmentModal({
+            selectedDate: dateToIsoDateString(data.start),
+            initialRoom: data.room,
+            initialHour: data.start.getHours(),
+            initialMinute: data.start.getMinutes(),
+        }, isEdit ? editingEvent : null);
         return;
     }
 
@@ -419,32 +434,6 @@ const handleAppointmentSuccess = async (data) => {
             || (err.response?.data?.errors && Object.values(err.response.data.errors).flat().join('\n'))
             || 'Failed to save appointment. Please check the form and try again.';
         alert(msg);
-    }
-};
-
-const handleOccupancyProceed = (selectedSlot = null) => {
-    const occupancyData = modalState.value.occupancy.data;
-    const callback = modalState.value.occupancy.callback;
-    closeModal('occupancy');
-
-    if (callback) {
-        if (selectedSlot) {
-            // Use the selected slot
-            callback({
-                selectedDate: dateToIsoDateString(selectedSlot.start),
-                initialRoom: occupancyData.room,
-                initialHour: selectedSlot.start.getHours(),
-                initialMinute: selectedSlot.start.getMinutes()
-            });
-        } else {
-            // Use originally selected time
-            callback({
-                selectedDate: dateToIsoDateString(occupancyData.date),
-                initialRoom: occupancyData.room,
-                initialHour: occupancyData.selectedHour !== null ? occupancyData.selectedHour : 9,
-                initialMinute: occupancyData.selectedMinute !== null ? occupancyData.selectedMinute : 0
-            });
-        }
     }
 };
 
@@ -515,76 +504,21 @@ const confirmDeleteEvent = async () => {
     }
 };
 
-// Open the floating quick-create popover when a calendar cell is clicked
 const handleDateClick = (date, hour = null, minute = null, position = null) => {
-    quickCreate.value = {
-        visible: true,
-        position: position || { x: window.innerWidth / 2 - 170, y: window.innerHeight / 2 - 180 },
-        date: new Date(date),
-        room: availableRooms.value[0] || '',
-    };
-};
-
-const closeQuickCreate = () => {
-    quickCreate.value = { visible: false, position: null, date: null, room: '' };
-};
-
-const handleQuickCreateSave = (data) => {
-    const [sh, sm] = data.startTime.split(':').map(Number);
-    const [eh, em] = data.endTime.split(':').map(Number);
-
-    const startDt = new Date(data.date);
-    startDt.setHours(sh, sm, 0, 0);
-
-    const endDt = new Date(data.date);
-    endDt.setHours(eh, em, 0, 0);
-    if (endDt <= startDt) endDt.setDate(endDt.getDate() + 1);
-
-    const payload = {
-        title: data.title,
-        type: data.eventType,
-        room: data.room,
-        start: startDt,
-        end: endDt,
-        allDay: false,
-        deptOffice: '',
-        organization: '',
-        description: '',
-        agenda: data.eventType === 'Meeting' ? data.title : '',
-        subject: data.eventType === 'Class' ? data.title : '',
-        section: '',
-        faculty: '',
-        organizer: '',
-        name: '',
-        requester: '',
-        numberParticipants: null,
-        numberOfStudents: null,
-        tablesChairs: false,
-        airConditioner: false,
-        whiteboard: false,
-        additionalInstructions: '',
-        recurring: false,
-    };
-
-    closeQuickCreate();
-    handleAppointmentSuccess(payload);
-};
-
-const handleQuickCreateMoreOptions = (data) => {
-    const [sh, sm] = (data?.startTime || '09:00').split(':').map(Number);
-    const baseDate = data?.date || quickCreate.value.date || new Date();
-    closeQuickCreate();
     openAppointmentModal({
-        selectedDate: dateToIsoDateString(baseDate),
-        initialRoom: data?.room || availableRooms.value[0] || '',
-        initialHour: sh,
-        initialMinute: sm,
+        selectedDate: dateToIsoDateString(new Date(date)),
+        initialRoom: availableRooms.value[0] || '',
+        initialHour: hour ?? 9,
+        initialMinute: minute ?? 0,
     });
 };
 
 const handleDirectAppointment = (room) => {
-    openOccupancyModal(room, new Date(), 9, 0, (appointmentData) => {
-        openAppointmentModal(appointmentData);
+    openAppointmentModal({
+        selectedDate: dateToIsoDateString(new Date()),
+        initialRoom: room,
+        initialHour: 9,
+        initialMinute: 0,
     });
 };
 
@@ -657,8 +591,7 @@ watchEffect(() => {
                     @update:date="(date) => currentCalendarDate = date"
                     @update:mode="(mode) => currentCalendarMode = mode" @dateClicked="handleDateClick"
                     @selectEvent="openEventViewer" @editEvent="handleEditEvent" @deleteEvent="handleDeleteEvent"
-                    @addAppointment="() => handleDirectAppointment(availableRooms[0])"
-                    @dayClick="openDayEventsViewer" />
+                    @addAppointment="() => handleDirectAppointment(availableRooms[0])" />
             </main>
         </div>
 
@@ -666,31 +599,54 @@ watchEffect(() => {
         <AppointmentModal :is-visible="modalState.appointment.visible"
             :selected-date="modalState.appointment.data?.selectedDate"
             :initial-room="modalState.appointment.data?.initialRoom"
+            :rooms="availableRooms"
+            :current-requester="props.currentRequester"
+            :room-equipments-map="roomEquipmentsMap"
             :initial-hour="modalState.appointment.data?.initialHour"
             :initial-minute="modalState.appointment.data?.initialMinute" :editing-event="modalState.appointment.editing"
             @close="() => closeModal('appointment')" @success="handleAppointmentSuccess" />
 
-        <OccupancyCheckModal :is-visible="modalState.occupancy.visible" :data="modalState.occupancy.data"
-            @close="() => closeModal('occupancy')" @proceed="handleOccupancyProceed" />
-
         <EventViewerModal :is-visible="modalState.eventViewer.visible" :event="modalState.eventViewer.event"
             @close="() => closeModal('eventViewer')" @edit="handleEditEvent" @delete="handleDeleteEvent" />
 
-        <DayEventsViewerModal :is-visible="modalState.dayViewer.visible" :events="modalState.dayViewer.events"
-            :date="modalState.dayViewer.date" @close="() => closeModal('dayViewer')" @view-event="openEventViewer"
-            @edit-event="handleEditEvent" @delete-event="handleDeleteEvent"
-            @add-appointment="() => handleDirectAppointment(availableRooms[0])" />
+        <div
+            v-if="conflictNotice.visible"
+            class="fixed inset-0 z-[70] flex items-center justify-center bg-black bg-opacity-50"
+            @click.self="closeConflictNoticeModal"
+        >
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" @click.stop>
+                <div class="bg-[#7A0C23] px-6 py-4">
+                    <h3 class="text-xl font-semibold text-white">Reservation Conflict</h3>
+                </div>
+                <div class="p-6">
+                    <p class="text-gray-800 mb-4">
+                        This room is already occupied for the selected time.
+                    </p>
 
-        <QuickCreatePopover
-            :is-visible="quickCreate.visible"
-            :position="quickCreate.position"
-            :initial-date="quickCreate.date"
-            :initial-room="quickCreate.room"
-            :rooms="availableRooms"
-            @close="closeQuickCreate"
-            @save="handleQuickCreateSave"
-            @more-options="handleQuickCreateMoreOptions"
-        />
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
+                        <p class="text-sm"><span class="font-semibold text-red-800">Room:</span> {{ conflictNotice.room }}</p>
+                        <p class="text-sm"><span class="font-semibold text-red-800">Date:</span> {{ conflictNotice.date }}</p>
+                        <p class="text-sm"><span class="font-semibold text-red-800">Requested:</span> {{ conflictNotice.requestedRange }}</p>
+                        <p class="text-sm"><span class="font-semibold text-red-800">Occupied by:</span> {{ conflictNotice.conflictTitle }}</p>
+                        <p class="text-sm"><span class="font-semibold text-red-800">Occupied time:</span> {{ conflictNotice.conflictRange }}</p>
+                    </div>
+
+                    <p class="text-sm text-gray-600 mt-4">
+                        Please choose a different room or adjust the booking time.
+                    </p>
+
+                    <div class="flex justify-end mt-6">
+                        <button
+                            type="button"
+                            class="px-4 py-2 rounded-lg font-medium text-white bg-[#7A0C23] hover:opacity-90 transition"
+                            @click="closeConflictNoticeModal"
+                        >
+                            Okay
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Delete confirmation modal -->
         <div

@@ -42,14 +42,18 @@ class RoomController extends Controller
 
     public function store(StoreRoomRequest $request)
     {
-        Room::create($request->validated());
+        $payload = $request->validated();
+        $payload['equipments'] = $this->normalizeEquipments($payload['equipments'] ?? null);
+        Room::create($payload);
 
         return redirect()->back()->with('success', 'Room created successfully.');
     }
 
     public function update(UpdateRoomRequest $request, Room $room)
     {
-        $room->update($request->validated());
+        $payload = $request->validated();
+        $payload['equipments'] = $this->normalizeEquipments($payload['equipments'] ?? null);
+        $room->update($payload);
 
         return redirect()->back()->with('success', 'Room updated successfully.');
     }
@@ -61,5 +65,41 @@ class RoomController extends Controller
         return redirect()
             ->back()
             ->with('success', 'Room deleted successfully.');
+    }
+
+    private function normalizeEquipments($equipments): ?array
+    {
+        if (is_array($equipments)) {
+            $list = array_values(array_filter(array_map(
+                fn($item) => trim((string) $item),
+                $equipments
+            )));
+            return $list ?: null;
+        }
+
+        if (!is_string($equipments) || trim($equipments) === '') {
+            return null;
+        }
+
+        $trimmed = trim($equipments);
+
+        // Accept JSON array input if provided.
+        $decoded = json_decode($trimmed, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $list = array_values(array_filter(array_map(
+                fn($item) => trim((string) $item),
+                $decoded
+            )));
+            return $list ?: null;
+        }
+
+        // Fallback to comma/newline/semicolon separated text.
+        $list = preg_split('/[\r\n,;]+/', $trimmed) ?: [];
+        $list = array_values(array_filter(array_map(
+            fn($item) => trim((string) $item),
+            $list
+        )));
+
+        return $list ?: null;
     }
 }

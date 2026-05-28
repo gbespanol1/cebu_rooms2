@@ -12,14 +12,67 @@ use Inertia\Inertia;
 
 class UserAccountController extends Controller
 {
+    private function getSessionRole(Request $request): string
+    {
+        return strtolower((string) data_get($request->session()->get('user'), 'role', ''));
+    }
+
+    private function canManageUsers(Request $request): bool
+    {
+        $role = $this->getSessionRole($request);
+        return in_array($role, ['admin', 'sysadmin'], true);
+    }
+
+    private function ensureCanManageUsers(Request $request)
+    {
+        if ($this->canManageUsers($request)) {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized. Only admins can manage user accounts.',
+        ], 403);
+    }
+
     // Render the user account management page using Inertia
     public function index(Request $request)
     {
-        // Get paginated users with relationships
-        $users = UserAccount::with(['college', 'department'])
+        $query = UserAccount::with(['college', 'department']);
+
+        if ($request->filled('search')) {
+            $search = trim((string) $request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('username', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('middle_name', 'like', "%{$search}%")
+                    ->orWhere('employee_id', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('college_id')) {
+            $query->where('college_id', $request->input('college_id'));
+        }
+
+        if ($request->filled('department_id')) {
+            $query->where('department_id', $request->input('department_id'));
+        }
+
+        if ($request->filled('user_type')) {
+            $query->where('user_type', $request->input('user_type'));
+        }
+
+        if ($request->filled('account_status')) {
+            $query->where('account_status', $request->input('account_status'));
+        }
+
+        // Get users with relationships (frontend handles pagination UI)
+        $users = $query
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->paginate(20);
+            ->get();
 
         // Get colleges and departments for dropdowns
         $colleges = College::select('id', 'college_name')->get();
@@ -29,7 +82,7 @@ class UserAccountController extends Controller
         $stats = $this->getStats();
 
         // Transform users for frontend
-        $transformedUsers = $users->getCollection()->map(function ($user) {
+        $transformedUsers = $users->map(function ($user) {
             return [
                 'id' => $user->id,
                 'username' => $user->username,
@@ -60,13 +113,14 @@ class UserAccountController extends Controller
             'colleges' => $colleges,
             'departments' => $departments,
             'stats' => $stats,
+            'canManageUsers' => $this->canManageUsers($request),
             'pagination' => [
-                'total' => $users->total(),
-                'per_page' => $users->perPage(),
-                'current_page' => $users->currentPage(),
-                'last_page' => $users->lastPage(),
-                'from' => $users->firstItem(),
-                'to' => $users->lastItem(),
+                'total' => $users->count(),
+                'per_page' => $users->count(),
+                'current_page' => 1,
+                'last_page' => 1,
+                'from' => $users->count() > 0 ? 1 : null,
+                'to' => $users->count(),
             ],
             'filters' => $request->only(['search', 'college_id', 'department_id', 'user_type', 'account_status'])
         ]);
@@ -92,6 +146,10 @@ class UserAccountController extends Controller
     // Store new user
     public function store(Request $request)
     {
+        if ($resp = $this->ensureCanManageUsers($request)) {
+            return $resp;
+        }
+
         $validated = $request->validate([
             'username' => 'required|string|max:50|unique:user_accounts,username',
             'email' => 'required|email|max:255|unique:user_accounts,email',
@@ -124,6 +182,10 @@ class UserAccountController extends Controller
     // Update user
     public function update(Request $request, $id)
     {
+        if ($resp = $this->ensureCanManageUsers($request)) {
+            return $resp;
+        }
+
         $user = UserAccount::findOrFail($id);
 
         $validated = $request->validate([
@@ -155,8 +217,12 @@ class UserAccountController extends Controller
     }
 
     // Delete user
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        if ($resp = $this->ensureCanManageUsers($request)) {
+            return $resp;
+        }
+
         $user = UserAccount::findOrFail($id);
         $username = $user->username;
         $user->delete();
