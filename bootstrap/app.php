@@ -21,7 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register middleware aliases (including your custom CheckAuth)
         $middleware->alias([
             'auth' => \App\Http\Middleware\Authenticate::class,
-            'check.auth' => \App\Http\Middleware\CheckAuth::class, // Add this line
+            'auth.session' => \App\Http\Middleware\CheckSessionAuth::class,
         ]);
 
         // You can also add global middleware if needed

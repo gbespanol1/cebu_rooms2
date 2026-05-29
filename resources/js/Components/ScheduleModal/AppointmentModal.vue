@@ -411,17 +411,21 @@ const handleTimeChange = () => {
                 <input
                     v-model="appointmentForm.room"
                     type="text"
-                    class="border rounded-md p-2 pr-10 w-full"
+                    class="border border-gray-300 rounded-md p-2 pr-10 w-full appearance-none"
                     placeholder="Type or select a room"
                     @focus="openRoomDropdown"
                     @input="roomQuery = appointmentForm.room; openRoomDropdown()"
                 >
                 <button
                     type="button"
-                    class="absolute inset-y-0 right-0 px-3 text-gray-500 bg-transparent border-0 shadow-none"
+                    class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 pointer-events-auto"
+                    tabindex="-1"
+                    aria-label="Toggle room list"
                     @click="toggleRoomDropdown"
                 >
-                    ▼
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
                 </button>
 
                 <div
@@ -446,7 +450,7 @@ const handleTimeChange = () => {
 
         <div class="mb-4">
             <label class="text-sm font-medium text-gray-700 block mb-1">Requesting for a</label>
-            <select v-model="appointmentForm.type" class="border rounded-md p-2 w-full">
+            <select v-model="appointmentForm.type" class="border border-gray-300 rounded-md p-2 w-full">
                 <option>Class</option>
                 <option>Meeting</option>
                 <option>Event</option>

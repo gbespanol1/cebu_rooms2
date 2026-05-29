@@ -44,13 +44,27 @@ const handleChartDataUpdate = (data) => {
 
 // Update charts with new data
 const updateCharts = () => {
-    if (pieChartInstance && chartData.value.pieData.labels.length > 0) {
-        pieChartInstance.data = chartData.value.pieData
+    if (pieChartInstance) {
+        pieChartInstance.data = chartData.value.pieData.labels.length > 0
+            ? chartData.value.pieData
+            : {
+                labels: ['No data'],
+                datasets: [{ data: [1], backgroundColor: ['#E5E7EB'] }],
+            }
         pieChartInstance.update()
     }
 
-    if (barChartInstance && chartData.value.barData.labels.length > 0) {
-        barChartInstance.data = chartData.value.barData
+    if (barChartInstance) {
+        barChartInstance.data = chartData.value.barData.labels.length > 0
+            ? chartData.value.barData
+            : {
+                labels: ['No data'],
+                datasets: [{
+                    label: 'Equipment Count',
+                    data: [0],
+                    backgroundColor: '#7A0C23',
+                }],
+            }
         barChartInstance.update()
     }
 }

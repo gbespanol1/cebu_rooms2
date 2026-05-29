@@ -117,88 +117,118 @@ class EquipmentController extends Controller
     }
 
     /**
-     * Get equipment statistics for charts
+     * Get equipment statistics for charts (respects search/status filters).
      */
-    public function getStats()
+    public function getStats(Request $request)
     {
         try {
-            $total = Equipment::count();
-            $available = Equipment::where('status', 'available')->count();
-            $inUse = Equipment::where('status', 'in_use')->count();
-            $maintenance = Equipment::where('status', 'maintenance')->count();
-            $damaged = Equipment::where('status', 'damaged')->count();
-            $retired = Equipment::where('status', 'retired')->count();
+            $query = $this->equipmentStatsQuery($request);
 
-            $totalValue = Equipment::sum('purchase_price');
+            $total = (clone $query)->count();
+            $available = (clone $query)->where('status', 'available')->count();
+            $inUse = (clone $query)->where('status', 'in_use')->count();
+            $maintenance = (clone $query)->where('status', 'maintenance')->count();
+            $damaged = (clone $query)->where('status', 'damaged')->count();
+            $retired = (clone $query)->where('status', 'retired')->count();
+
+            $totalValue = (clone $query)->sum('purchase_price');
             $avgValue = $total > 0 ? $totalValue / $total : 0;
 
-            // Equipment by status (for pie chart)
-            $statusStats = Equipment::select('status', DB::raw('COUNT(*) as count'))
+            $statusStats = (clone $query)
+                ->select('status', DB::raw('COUNT(*) as count'))
                 ->groupBy('status')
                 ->get()
-                ->map(function($item) {
+                ->map(function ($item) {
                     return [
                         'status' => ucfirst(str_replace('_', ' ', $item->status)),
-                        'count' => $item->count
+                        'count' => $item->count,
                     ];
                 });
 
-            // Equipment by assigned user (for pie chart)
-            $personStats = Equipment::select('assigned_user_id', DB::raw('COUNT(*) as equipment_count'))
-                ->whereNotNull('assigned_user_id')
-                ->with(['assignedUser:id,first_name,last_name'])
+            $personStats = (clone $query)
+                ->select('assigned_user_id', DB::raw('COUNT(*) as equipment_count'))
                 ->groupBy('assigned_user_id')
+                ->orderByDesc('equipment_count')
                 ->get()
-                ->map(function($item) {
-                    return [
-                        'name' => $item->assignedUser ?
-                            $item->assignedUser->first_name . ' ' . $item->assignedUser->last_name :
-                            'Unknown User',
-                        'equipmentCount' => $item->equipment_count
-                    ];
-                });
+                ->map(function ($item) {
+                    if (!$item->assigned_user_id) {
+                        return [
+                            'name' => 'Unassigned',
+                            'equipmentCount' => (int) $item->equipment_count,
+                        ];
+                    }
 
-            // Equipment by building (for bar chart)
-            $buildingStats = Equipment::select('building_id', DB::raw('COUNT(*) as equipment_count'))
-                ->whereNotNull('building_id')
-                ->with(['building:id,building_name'])
+                    $user = UserAccount::select('id', 'first_name', 'last_name')
+                        ->find($item->assigned_user_id);
+
+                    return [
+                        'name' => $user
+                            ? trim($user->first_name . ' ' . $user->last_name)
+                            : 'Unknown User',
+                        'equipmentCount' => (int) $item->equipment_count,
+                    ];
+                })
+                ->values();
+
+            $buildingStats = (clone $query)
+                ->select('building_id', DB::raw('COUNT(*) as equipment_count'))
                 ->groupBy('building_id')
+                ->orderByDesc('equipment_count')
                 ->get()
-                ->map(function($item) {
-                    return [
-                        'building' => $item->building ? $item->building->building_name : 'Unknown Building',
-                        'equipmentCount' => $item->equipment_count
-                    ];
-                });
+                ->map(function ($item) {
+                    if (!$item->building_id) {
+                        return [
+                            'building' => 'Unassigned Building',
+                            'equipmentCount' => (int) $item->equipment_count,
+                        ];
+                    }
 
-            // Equipment by college
-            $collegeStats = Equipment::select('college_id', DB::raw('COUNT(*) as equipment_count'))
-                ->whereNotNull('college_id')
-                ->with(['college:id,college_name'])
+                    $building = Building::select('id', 'building_name')->find($item->building_id);
+
+                    return [
+                        'building' => $building?->building_name ?? 'Unknown Building',
+                        'equipmentCount' => (int) $item->equipment_count,
+                    ];
+                })
+                ->values();
+
+            $collegeStats = (clone $query)
+                ->select('college_id', DB::raw('COUNT(*) as equipment_count'))
                 ->groupBy('college_id')
+                ->orderByDesc('equipment_count')
                 ->get()
-                ->map(function($item) {
-                    return [
-                        'college' => $item->college ? $item->college->college_name : 'Unknown College',
-                        'equipmentCount' => $item->equipment_count
-                    ];
-                });
+                ->map(function ($item) {
+                    if (!$item->college_id) {
+                        return [
+                            'college' => 'Unassigned College',
+                            'equipmentCount' => (int) $item->equipment_count,
+                        ];
+                    }
 
-            // Recent activities (last 10 equipment updates)
-            $recentActivities = Equipment::with(['assignedUser:id,first_name,last_name'])
+                    $college = College::select('id', 'college_name')->find($item->college_id);
+
+                    return [
+                        'college' => $college?->college_name ?? 'Unknown College',
+                        'equipmentCount' => (int) $item->equipment_count,
+                    ];
+                })
+                ->values();
+
+            $recentActivities = (clone $query)
+                ->with(['assignedUser:id,first_name,last_name'])
                 ->orderBy('updated_at', 'desc')
                 ->limit(10)
                 ->get()
-                ->map(function($item) {
+                ->map(function ($item) {
                     return [
                         'id' => $item->id,
                         'equipment_name' => $item->equipment_name,
                         'inventory_id' => $item->inventory_id,
                         'status' => $item->status,
-                        'updated_by' => $item->assignedUser ?
-                            $item->assignedUser->first_name . ' ' . $item->assignedUser->last_name :
-                            'System',
-                        'updated_at' => $item->updated_at->format('M d, Y H:i')
+                        'updated_by' => $item->assignedUser
+                            ? $item->assignedUser->first_name . ' ' . $item->assignedUser->last_name
+                            : 'System',
+                        'updated_at' => $item->updated_at->format('M d, Y H:i'),
                     ];
                 });
 
@@ -218,15 +248,58 @@ class EquipmentController extends Controller
                     'building_stats' => $buildingStats,
                     'college_stats' => $collegeStats,
                     'recent_activities' => $recentActivities,
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch equipment statistics.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Base query for equipment stats, aligned with dashboard filters.
+     */
+    private function equipmentStatsQuery(Request $request)
+    {
+        $search = trim((string) $request->query('search', ''));
+        $status = trim((string) $request->query('status', ''));
+
+        $query = Equipment::query();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('equipment_name', 'like', "%{$search}%")
+                    ->orWhere('inventory_id', 'like', "%{$search}%")
+                    ->orWhere('property_id', 'like', "%{$search}%")
+                    ->orWhere('brand', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%")
+                    ->orWhere('serial_number', 'like', "%{$search}%")
+                    ->orWhereHas('assignedUser', function ($q) use ($search) {
+                        $q->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('username', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('building', function ($q) use ($search) {
+                        $q->where('building_name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('college', function ($q) use ($search) {
+                        $q->where('college_name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('room', function ($q) use ($search) {
+                        $q->where('room_code', 'like', "%{$search}%")
+                            ->orWhere('room_name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        return $query;
     }
 
     /**

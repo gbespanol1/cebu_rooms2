@@ -36,7 +36,7 @@
               'w-full px-4 py-3 border rounded-lg focus:ring-2 focus:border-transparent transition duration-200',
               'border-gray-300 focus:ring-[#7A0C23]'
             ]"
-            placeholder="Enter your username"
+            placeholder="Enter your username or email"
           >
         </div>
 
@@ -75,13 +75,6 @@
           </span>
         </button>
       </form>
-
-      <!-- Demo Credentials -->
-      <div class="mt-8 pt-6 border-t border-gray-200">
-        <div class="space-y-1 text-sm text-gray-600">
-          <div><span class="font-medium">Admin:</span> admin / password123</div>
-        </div>
-      </div>
     </div>
   </div>
 </template>

@@ -119,6 +119,7 @@ const addUser = async (newUser) => {
             account_status: 'active',
             college_id: college ? college.id : null,
             department_id: department ? department.id : null,
+            permissions: newUser.permissions || [],
         };
 
         const response = await fetch('/user-accounts', {
@@ -182,6 +183,7 @@ const updateUser = async (updatedUser) => {
             account_status: updatedUser.account_status || 'active',
             college_id: college ? college.id : null,
             department_id: department ? department.id : null,
+            permissions: updatedUser.permissions || [],
             ...(updatedUser.password && { password: updatedUser.password })
         };
 

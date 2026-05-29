@@ -89,36 +89,65 @@ const fetchEquipmentUsage = async () => {
     }
 }
 
-// --- Fetch Equipment Statistics ---
+const generateChartColors = (count) => {
+    const palette = [
+        '#4CAF50', '#FF9800', '#2196F3', '#9C27B0', '#FF5722',
+        '#795548', '#607D8B', '#3F51B5', '#009688', '#E91E63',
+        '#7A0C23', '#00BCD4', '#8BC34A', '#FFC107', '#673AB7',
+    ]
+
+    return Array.from({ length: count }, (_, index) => palette[index % palette.length])
+}
+
+const emitChartData = () => {
+    const personStats = statistics.value.person_stats || []
+    const buildingStats = statistics.value.building_stats || []
+
+    emit('chart-data-update', {
+        pieData: {
+            labels: personStats.map((p) => p.name),
+            datasets: [{
+                data: personStats.map((p) => p.equipmentCount),
+                backgroundColor: generateChartColors(personStats.length),
+            }],
+        },
+        barData: {
+            labels: buildingStats.map((b) => b.building),
+            datasets: [{
+                label: 'Equipment Count',
+                data: buildingStats.map((b) => b.equipmentCount),
+                backgroundColor: '#7A0C23',
+            }],
+        },
+    })
+}
+
+const getStatsFilterParams = () => {
+    const params = {}
+
+    if (searchTerm.value.trim()) {
+        params.search = searchTerm.value.trim()
+    }
+
+    if (activeFilter.value === 'available') {
+        params.status = 'available'
+    } else if (activeFilter.value === 'in_use') {
+        params.status = 'in_use'
+    }
+
+    return params
+}
+
+// --- Fetch Equipment Statistics (filtered from database) ---
 const fetchEquipmentStats = async () => {
     try {
-        const response = await axios.get(`${baseUrl}/stats`)
+        const response = await axios.get(`${baseUrl}/stats`, {
+            params: getStatsFilterParams(),
+        })
 
         if (response.data.success) {
             statistics.value = response.data.data
-
-            // Emit chart data to parent component
-            emit('chart-data-update', {
-                pieData: {
-                    labels: statistics.value.person_stats.map(p => p.name),
-                    datasets: [{
-                        data: statistics.value.person_stats.map(p => p.equipmentCount),
-                        backgroundColor: [
-                            '#4CAF50', '#FF9800', '#2196F3', '#9C27B0',
-                            '#FF5722', '#795548', '#607D8B', '#3F51B5',
-                            '#009688', '#E91E63'
-                        ]
-                    }]
-                },
-                barData: {
-                    labels: statistics.value.building_stats.map(b => b.building),
-                    datasets: [{
-                        label: 'Equipment Count',
-                        data: statistics.value.building_stats.map(b => b.equipmentCount),
-                        backgroundColor: '#7A0C23'
-                    }]
-                }
-            })
+            emitChartData()
         }
     } catch (err) {
         console.error('Error fetching equipment stats:', err)
@@ -169,37 +198,8 @@ const filteredUsageList = computed(() => {
     return filtered
 })
 
-// --- Filtered Statistics (for display when filters are applied) ---
-const filteredStatistics = computed(() => {
-    if (activeFilter.value === 'all' && !searchTerm.value) {
-        return statistics.value
-    }
-
-    // Calculate filtered stats based on current filtered list
-    let totalItems = 0
-    let availableItems = 0
-    let inUseItems = 0
-
-    filteredUsageList.value.forEach(item => {
-        item.equipmentUsed.forEach(eq => {
-            totalItems++
-            if (eq.status === 'Available') availableItems++
-            if (eq.status === 'In use') inUseItems++
-        })
-    })
-
-    return {
-        total: totalItems,
-        available: availableItems,
-        in_use: inUseItems,
-        // Keep other stats from original for now
-        maintenance: statistics.value.maintenance,
-        damaged: statistics.value.damaged,
-        retired: statistics.value.retired,
-        total_value: statistics.value.total_value,
-        average_value: statistics.value.average_value
-    }
-})
+// Statistics cards use the same filtered API data as the charts
+const filteredStatistics = computed(() => statistics.value)
 
 // --- Paginated Data ---
 const paginatedUsageList = computed(() => {
@@ -242,29 +242,6 @@ const goToPage = (page) => {
 const resetPagination = () => {
     currentPage.value = 1
 }
-
-// --- Statistics Computed (Based on Filtered List) ---
-const personStats = computed(() => {
-    const stats = {}
-    filteredUsageList.value.forEach(room => {
-        if (!stats[room.name]) {
-            stats[room.name] = { name: room.name, equipmentCount: 0 }
-        }
-        stats[room.name].equipmentCount += room.equipmentUsed.length
-    })
-    return Object.values(stats).sort((a, b) => b.equipmentCount - a.equipmentCount)
-})
-
-const buildingStats = computed(() => {
-    const stats = {}
-    filteredUsageList.value.forEach(room => {
-        if (!stats[room.building]) {
-            stats[room.building] = { building: room.building, equipmentCount: 0 }
-        }
-        stats[room.building].equipmentCount += room.equipmentUsed.length
-    })
-    return Object.values(stats).sort((a, b) => b.equipmentCount - a.equipmentCount)
-})
 
 // --- Modal State ---
 const isDetailsModalVisible = ref(false)
@@ -310,28 +287,23 @@ onMounted(() => {
 onUnmounted(() => {
     if (timerInterval) clearInterval(timerInterval)
     if (searchTimeout) clearTimeout(searchTimeout)
+    if (statsTimeout) clearTimeout(statsTimeout)
 })
 
-// Watch the filtered list for chart updates
-watch(filteredUsageList, () => {
-    emit('chart-data-update', {
-        pieData: {
-            labels: personStats.value.map(p => p.name),
-            datasets: [{
-                data: personStats.value.map(p => p.equipmentCount),
-                backgroundColor: ['#4CAF50', '#FF9800', '#2196F3', '#9C27B0', '#FF5722', '#795548', '#607D8B']
-            }]
-        },
-        barData: {
-            labels: buildingStats.value.map(b => b.building),
-            datasets: [{
-                label: 'Equipment Count',
-                data: buildingStats.value.map(b => b.equipmentCount),
-                backgroundColor: '#7A0C23'
-            }]
-        }
-    })
-}, { deep: true })
+let statsTimeout = null
+const refreshChartStats = () => {
+    if (statsTimeout) {
+        clearTimeout(statsTimeout)
+    }
+
+    statsTimeout = setTimeout(() => {
+        fetchEquipmentStats()
+    }, 300)
+}
+
+watch([searchTerm, activeFilter], () => {
+    refreshChartStats()
+})
 
 // Watch items per page change
 watch(itemsPerPage, () => {

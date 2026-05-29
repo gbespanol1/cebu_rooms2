@@ -84,6 +84,20 @@ class UserAccount extends Authenticatable
         return $this->hasMany(Schedule::class, 'faculty_id');
     }
 
+    public function isAdmin(): bool
+    {
+        return $this->user_type === 'admin';
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        if ($this->isAdmin()) {
+            return true;
+        }
+
+        return in_array($permission, $this->roles ?? [], true);
+    }
+
     public function requestedSchedules()
     {
         return $this->hasMany(Schedule::class, 'requester_id');

@@ -38,6 +38,11 @@ class UserAccountController extends Controller
     // Render the user account management page using Inertia
     public function index(Request $request)
     {
+        if (!$this->canManageUsers($request)) {
+            return redirect()->route('main.dashboard')
+                ->with('error', 'You do not have permission to manage user accounts.');
+        }
+
         $query = UserAccount::with(['college', 'department']);
 
         if ($request->filled('search')) {
@@ -165,9 +170,7 @@ class UserAccountController extends Controller
         ]);
 
         $validated['password'] = Hash::make($validated['password']);
-
-        // Add default permissions based on user type
-        $validated['roles'] = $this->getDefaultPermissions($validated['user_type']);
+        $validated['roles'] = $this->resolvePermissions($request, $validated['user_type']);
 
         $user = UserAccount::create($validated);
         $user->load(['college', 'department']);
@@ -204,6 +207,10 @@ class UserAccountController extends Controller
         // Handle password update if provided
         if ($request->filled('password')) {
             $validated['password'] = Hash::make($request->password);
+        }
+
+        if ($request->has('permissions')) {
+            $validated['roles'] = $this->resolvePermissions($request, $validated['user_type']);
         }
 
         $user->update($validated);
@@ -249,6 +256,21 @@ class UserAccountController extends Controller
             'account_status' => $user->account_status,
             'permissions' => $user->roles ?? [],
         ];
+    }
+
+    private function resolvePermissions(Request $request, string $userType): array
+    {
+        $allowed = ['Can Approve', 'Can Edit', 'Can Book', 'Staff Work', 'User Type Only'];
+
+        if ($request->has('permissions') && is_array($request->input('permissions'))) {
+            $selected = array_values(array_intersect($request->input('permissions'), $allowed));
+
+            if (!empty($selected)) {
+                return $selected;
+            }
+        }
+
+        return $this->getDefaultPermissions($userType);
     }
 
     // Get default permissions based on user type
