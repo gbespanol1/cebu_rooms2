@@ -22,7 +22,7 @@ class ValidEquipmentCatalogName implements ValidationRule
             ->exists();
 
         if (!$exists) {
-            $fail("“{$name}” is not in the equipment inventory. Please select a valid item from the suggestions.");
+            $fail("“{$name}” is not a registered equipment type. Please select a valid item from the suggestions.");
         }
     }
 }

@@ -9,6 +9,7 @@ use App\Models\Building;
 use App\Models\Equipment;
 use App\Models\Department;
 use App\Models\UserAccount;
+use App\Services\EquipmentInventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -573,6 +574,7 @@ class EquipmentController extends Controller
 
             $excludeLower = array_map(fn ($name) => strtolower((string) $name), $exclude);
 
+            // COUNT(*) per name — same rule as EquipmentInventoryService::globalInventoryCountsByName()
             $suggestions = Equipment::query()
                 ->select('equipment_name', DB::raw('MIN(id) as id'), DB::raw('COUNT(*) as inventory_count'))
                 ->where('equipment_name', 'like', '%' . $query . '%')

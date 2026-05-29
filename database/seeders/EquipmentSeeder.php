@@ -6,7 +6,6 @@ use App\Models\Building;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\Equipment;
-use App\Models\Room;
 use App\Models\UserAccount;
 use Illuminate\Database\Seeder;
 
@@ -16,36 +15,35 @@ class EquipmentSeeder extends Seeder
      * Canonical equipment catalog used for room autocomplete suggestions.
      */
     public const CATALOG = [
-        ['name' => 'TV', 'brand' => 'Samsung', 'status' => 'available'],
-        ['name' => 'Television', 'brand' => 'LG', 'status' => 'available'],
-        ['name' => 'Chairs', 'brand' => 'Generic', 'status' => 'available'],
-        ['name' => 'Remote Control', 'brand' => 'Universal', 'status' => 'available'],
-        ['name' => 'Air Conditioner', 'brand' => 'Carrier', 'status' => 'available'],
-        ['name' => 'Aircon', 'brand' => 'Daikin', 'status' => 'available'],
-        ['name' => 'Projector', 'brand' => 'Epson', 'status' => 'available'],
-        ['name' => 'Whiteboard', 'brand' => 'Office Pro', 'status' => 'available'],
-        ['name' => 'Microphone', 'brand' => 'Shure', 'status' => 'available'],
-        ['name' => 'Speaker System', 'brand' => 'JBL', 'status' => 'available'],
-        ['name' => 'Laptop', 'brand' => 'Dell', 'status' => 'available'],
-        ['name' => 'Desktop Computer', 'brand' => 'HP', 'status' => 'available'],
-        ['name' => 'Printer', 'brand' => 'Canon', 'status' => 'available'],
-        ['name' => 'Scanner', 'brand' => 'Fujitsu', 'status' => 'available'],
-        ['name' => 'Camera', 'brand' => 'Sony', 'status' => 'available'],
-        ['name' => 'Tablet', 'brand' => 'Apple', 'status' => 'available'],
-        ['name' => 'Router', 'brand' => 'Cisco', 'status' => 'available'],
-        ['name' => 'Switch', 'brand' => 'Netgear', 'status' => 'available'],
-        ['name' => 'Server', 'brand' => 'Dell', 'status' => 'maintenance'],
-        ['name' => 'Desk', 'brand' => 'IKEA', 'status' => 'available'],
-        ['name' => 'Table', 'brand' => 'IKEA', 'status' => 'available'],
-        ['name' => 'Clock', 'brand' => 'Seiko', 'status' => 'available'],
-        ['name' => 'Fan', 'brand' => 'Panasonic', 'status' => 'available'],
-        ['name' => 'Keyboard', 'brand' => 'Logitech', 'status' => 'available'],
-        ['name' => 'Mouse', 'brand' => 'Logitech', 'status' => 'available'],
+        ['name' => 'TV', 'brand' => 'Samsung', 'status' => 'available', 'quantity' => 3],
+        ['name' => 'Television', 'brand' => 'LG', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Chairs', 'brand' => 'Generic', 'status' => 'available', 'quantity' => 10],
+        ['name' => 'Remote Control', 'brand' => 'Universal', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Air Conditioner', 'brand' => 'Carrier', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Aircon', 'brand' => 'Daikin', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Projector', 'brand' => 'Epson', 'status' => 'available', 'quantity' => 1],
+        ['name' => 'Whiteboard', 'brand' => 'Office Pro', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Microphone', 'brand' => 'Shure', 'status' => 'available', 'quantity' => 4],
+        ['name' => 'Speaker System', 'brand' => 'JBL', 'status' => 'available', 'quantity' => 1],
+        ['name' => 'Laptop', 'brand' => 'Dell', 'status' => 'available', 'quantity' => 5],
+        ['name' => 'Desktop Computer', 'brand' => 'HP', 'status' => 'available', 'quantity' => 12],
+        ['name' => 'Printer', 'brand' => 'Canon', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Scanner', 'brand' => 'Fujitsu', 'status' => 'available', 'quantity' => 1],
+        ['name' => 'Camera', 'brand' => 'Sony', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Tablet', 'brand' => 'Apple', 'status' => 'available', 'quantity' => 3],
+        ['name' => 'Router', 'brand' => 'Cisco', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Switch', 'brand' => 'Netgear', 'status' => 'available', 'quantity' => 2],
+        ['name' => 'Server', 'brand' => 'Dell', 'status' => 'maintenance', 'quantity' => 1],
+        ['name' => 'Desk', 'brand' => 'IKEA', 'status' => 'available', 'quantity' => 8],
+        ['name' => 'Table', 'brand' => 'IKEA', 'status' => 'available', 'quantity' => 4],
+        ['name' => 'Clock', 'brand' => 'Seiko', 'status' => 'available', 'quantity' => 1],
+        ['name' => 'Fan', 'brand' => 'Panasonic', 'status' => 'available', 'quantity' => 4],
+        ['name' => 'Keyboard', 'brand' => 'Logitech', 'status' => 'available', 'quantity' => 10],
+        ['name' => 'Mouse', 'brand' => 'Logitech', 'status' => 'available', 'quantity' => 10],
     ];
 
     public function run(): void
     {
-        $room = Room::query()->first();
         $building = Building::query()->first();
         $college = College::query()->first();
         $department = Department::query()->first();
@@ -62,8 +60,8 @@ class EquipmentSeeder extends Seeder
                     'equipment_name' => $item['name'],
                     'property_id' => 'PROP-CAT-' . str_pad((string) $inventoryNumber, 5, '0', STR_PAD_LEFT),
                     'description' => 'Catalog item for room equipment picker.',
-                    'quantity' => 1,
-                    'room_id' => $room?->id,
+                    'quantity' => (int) ($item['quantity'] ?? 1),
+                    'room_id' => null,
                     'building_id' => $building?->id,
                     'college_id' => $college?->id,
                     'department_id' => $department?->id,

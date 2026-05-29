@@ -49,6 +49,7 @@ export const loadEventsFromStorage = () => {
         isHoliday: false,
         recurring: false,
         numberParticipants: 40,
+        equipment: ['Chairs', 'Table', 'Remote Control'],
         tablesChairs: true,
         airConditioner: true,
         whiteboard: true,

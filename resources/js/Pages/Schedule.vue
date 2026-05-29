@@ -4,6 +4,8 @@ import Layout from '@/Layouts/schedulelayout.vue';
 defineProps({
     schedules: { type: Array, default: () => [] },
     rooms: { type: Array, default: () => [] },
+    roomEquipmentQuantities: { type: Object, default: () => ({}) },
+    globalEquipmentQuantities: { type: Object, default: () => ({}) },
     faculty: { type: Array, default: () => [] },
     requesters: { type: Array, default: () => [] },
     currentRequester: { type: String, default: '' },
@@ -15,6 +17,8 @@ defineProps({
     <Layout
         :schedules="schedules"
         :rooms="rooms"
+        :room-equipment-quantities="roomEquipmentQuantities"
+        :global-equipment-quantities="globalEquipmentQuantities"
         :faculty="faculty"
         :requesters="requesters"
         :current-requester="currentRequester"

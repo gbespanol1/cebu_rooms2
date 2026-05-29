@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, watch, defineProps, defineEmits, ref, computed } from 'vue';
+import { formatEquipmentAvailability } from '@/utils/equipmentAvailability.js';
 import ClassForm from './ClassForm.vue';
 import MeetingForm from './MeetingForm.vue';
 import EventForm from './EventForm.vue';
@@ -11,10 +12,13 @@ const props = defineProps({
     initialHour: { type: [Number, null], default: 9 },
     initialMinute: { type: [Number, null], default: 0 },
     editingEvent: { type: Object, default: null },
-    initialRoom: { type: String, default: 'UG 114' },
+    initialRoom: { type: String, default: '' },
     rooms: { type: Array, default: () => [] },
     currentRequester: { type: String, default: '' },
-    roomEquipmentsMap: { type: Object, default: () => ({}) }
+    roomEquipmentsMap: { type: Object, default: () => ({}) },
+    roomEquipmentQuantitiesMap: { type: Object, default: () => ({}) },
+    globalEquipmentQuantities: { type: Object, default: () => ({}) },
+    roomEquipmentDetailsMap: { type: Object, default: () => ({}) },
 });
 
 const emit = defineEmits(['close', 'success']);
@@ -22,7 +26,7 @@ const emit = defineEmits(['close', 'success']);
 // --- Reactive form object ---
 const appointmentForm = reactive({
     // Basic Info
-    room: props.initialRoom || 'UG 114',
+    room: props.initialRoom || '',
     type: 'Meeting',
     date: props.selectedDate,
     startHour: props.initialHour !== null ? props.initialHour : 9,
@@ -65,9 +69,7 @@ const timeConflictWarning = ref('');
 const showRoomDropdown = ref(false);
 const roomQuery = ref('');
 const roomOptions = computed(() => (
-    Array.isArray(props.rooms) && props.rooms.length > 0
-        ? props.rooms
-        : ['UG 114']
+    Array.isArray(props.rooms) && props.rooms.length > 0 ? props.rooms : []
 ));
 
 const filteredRoomOptions = computed(() => {
@@ -108,14 +110,103 @@ const getRoomEquipmentDefaults = (roomName) => {
         : [];
 };
 
-const applyRoomEquipmentDefaults = (roomName) => {
-    const equipment = getRoomEquipmentDefaults(roomName);
-    roomEquipmentOptions.value = Array.from(new Set(equipment.map((item) => item.trim()).filter(Boolean)));
-    appointmentForm.selectedEquipments = [...roomEquipmentOptions.value];
-    const selectedLower = appointmentForm.selectedEquipments.map((item) => item.toLowerCase());
+const getEquipmentQuantity = (roomName, equipmentName) => {
+    const key = String(equipmentName || '').toLowerCase();
+    const roomKey = roomName || appointmentForm.room;
+    const roomQuantities = props.roomEquipmentQuantitiesMap?.[roomKey]
+        || props.roomEquipmentQuantitiesMap?.[String(roomKey || '').toLowerCase()]
+        || {};
+
+    if (roomQuantities[key] !== undefined && roomQuantities[key] !== null) {
+        return Number(roomQuantities[key]);
+    }
+
+    const globalValue = props.globalEquipmentQuantities?.[key];
+    if (globalValue !== undefined && globalValue !== null) {
+        return Number(globalValue);
+    }
+
+    return null;
+};
+
+const syncEquipmentFlags = () => {
+    const selectedLower = appointmentForm.selectedEquipments.map((item) => String(item).toLowerCase());
     appointmentForm.tablesChairs = selectedLower.some((item) => item.includes('table') || item.includes('chair'));
     appointmentForm.airConditioner = selectedLower.some((item) => item.includes('air'));
     appointmentForm.whiteboard = selectedLower.some((item) => item.includes('whiteboard') || item.includes('white board'));
+};
+
+const refreshEquipmentOptionQuantities = () => {
+    if (!roomEquipmentOptions.value.length) return;
+    roomEquipmentOptions.value = buildEquipmentOptions(
+        roomEquipmentOptions.value.map((item) => item.name),
+        appointmentForm.room
+    );
+};
+
+const buildEquipmentOptions = (names, roomName) => {
+    const seen = new Set();
+    const options = [];
+
+    for (const raw of names) {
+        const name = String(raw).trim();
+        if (!name) continue;
+
+        const dedupeKey = name.toLowerCase();
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        options.push({
+            name,
+            quantity: getEquipmentQuantity(roomName, name),
+        });
+    }
+
+    return options;
+};
+
+const clearRoomEquipment = () => {
+    roomEquipmentOptions.value = [];
+    appointmentForm.selectedEquipments = [];
+    appointmentForm.tablesChairs = false;
+    appointmentForm.airConditioner = false;
+    appointmentForm.whiteboard = false;
+};
+
+const resolveRoomEquipmentDetails = (roomName) => {
+    const trimmed = String(roomName || '').trim();
+    if (!trimmed) return [];
+
+    const fromMap = props.roomEquipmentDetailsMap?.[trimmed]
+        || props.roomEquipmentDetailsMap?.[trimmed.toLowerCase()];
+
+    if (Array.isArray(fromMap) && fromMap.length) {
+        return fromMap.map((item) => ({
+            name: String(item.name ?? item).trim(),
+            quantity: Number(item.quantity ?? getEquipmentQuantity(trimmed, item.name ?? item)),
+        }));
+    }
+
+    const equipmentNames = getRoomEquipmentDefaults(trimmed);
+    return buildEquipmentOptions(equipmentNames, trimmed);
+};
+
+const applyRoomEquipmentDefaults = (roomName) => {
+    const trimmed = String(roomName || '').trim();
+    if (!trimmed) {
+        clearRoomEquipment();
+        return;
+    }
+
+    const details = resolveRoomEquipmentDetails(trimmed);
+    if (!details.length) {
+        clearRoomEquipment();
+        return;
+    }
+
+    roomEquipmentOptions.value = details;
+    appointmentForm.selectedEquipments = details.map((item) => item.name);
+    syncEquipmentFlags();
 };
 
 // --- Computed properties ---
@@ -232,7 +323,7 @@ watch(() => [props.selectedDate, props.initialHour, props.initialMinute, props.i
     if (!props.editingEvent) {
         Object.assign(appointmentForm, getInitialFormState());
         appointmentForm.date = newDate;
-        appointmentForm.room = newRoom || 'UG 114';
+        appointmentForm.room = newRoom || '';
         appointmentForm.requester = props.currentRequester || '';
         applyRoomEquipmentDefaults(appointmentForm.room);
 
@@ -265,7 +356,7 @@ watch(() => props.editingEvent, (newEvent) => {
         // Populate form with event data for editing
         const extProps = newEvent.extendedProps || {};
 
-        appointmentForm.room = extProps.room || 'UG 114';
+        appointmentForm.room = extProps.room || '';
         appointmentForm.type = newEvent.list || 'Meeting';
         const _editStart = new Date(newEvent.start);
         appointmentForm.date = `${_editStart.getFullYear()}-${String(_editStart.getMonth() + 1).padStart(2, '0')}-${String(_editStart.getDate()).padStart(2, '0')}`;
@@ -310,8 +401,12 @@ watch(() => props.editingEvent, (newEvent) => {
         const eventEquipment = Array.isArray(extProps.equipment)
             ? extProps.equipment.map((item) => String(item).trim()).filter(Boolean)
             : [];
-        roomEquipmentOptions.value = Array.from(new Set([...roomDefaults, ...eventEquipment]));
-        appointmentForm.selectedEquipments = eventEquipment.length > 0 ? eventEquipment : [...roomDefaults];
+        const mergedNames = eventEquipment.length > 0 ? eventEquipment : roomDefaults;
+        roomEquipmentOptions.value = buildEquipmentOptions(
+            [...roomDefaults, ...eventEquipment],
+            appointmentForm.room
+        );
+        appointmentForm.selectedEquipments = eventEquipment.length > 0 ? [...mergedNames] : roomDefaults;
     }
 }, { immediate: true });
 
@@ -326,6 +421,12 @@ watch(() => appointmentForm.room, (newRoom) => {
     applyRoomEquipmentDefaults(newRoom);
 });
 
+watch(
+    () => [props.roomEquipmentQuantitiesMap, props.globalEquipmentQuantities],
+    () => refreshEquipmentOptionQuantities(),
+    { deep: true }
+);
+
 watch(() => appointmentForm.selectedEquipments, (list) => {
     const values = Array.isArray(list) ? list.map((item) => String(item).toLowerCase()) : [];
     appointmentForm.tablesChairs = values.some((item) => item.includes('table') || item.includes('chair'));
@@ -337,6 +438,11 @@ watch(() => appointmentForm.selectedEquipments, (list) => {
 const closeModal = () => emit('close');
 
 const submitForm = () => {
+    if (!String(appointmentForm.room || '').trim()) {
+        alert('Please type or select a room.');
+        return;
+    }
+
     if (!isEndTimeValid.value) {
         alert('End time must be after start time. Please adjust the times.');
         return;
@@ -411,6 +517,7 @@ const handleTimeChange = () => {
                 <input
                     v-model="appointmentForm.room"
                     type="text"
+                    required
                     class="border border-gray-300 rounded-md p-2 pr-10 w-full appearance-none"
                     placeholder="Type or select a room"
                     @focus="openRoomDropdown"
@@ -601,11 +708,27 @@ const handleTimeChange = () => {
                 <div v-if="roomEquipmentOptions.length > 0" class="flex flex-col space-y-2">
                     <div
                         v-for="equipment in roomEquipmentOptions"
-                        :key="equipment"
-                        class="flex justify-between items-center"
+                        :key="equipment.name"
+                        class="flex justify-between items-center gap-3"
                     >
-                        <label class="text-sm font-medium text-gray-700 capitalize">{{ equipment }}</label>
-                        <input type="checkbox" :value="equipment" v-model="appointmentForm.selectedEquipments">
+                        <label
+                            :for="`equipment-${equipment.name}`"
+                            class="min-w-0 flex-1 cursor-pointer"
+                        >
+                            <span class="text-sm font-medium text-gray-800 capitalize">{{ equipment.name }}</span>
+                            <span
+                                class="ml-2 inline-block text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full tabular-nums"
+                            >
+                                {{ formatEquipmentAvailability(equipment.quantity) }}
+                            </span>
+                        </label>
+                        <input
+                            :id="`equipment-${equipment.name}`"
+                            type="checkbox"
+                            :value="equipment.name"
+                            v-model="appointmentForm.selectedEquipments"
+                            class="shrink-0"
+                        >
                     </div>
                 </div>
                 <p v-else class="text-sm text-gray-500">

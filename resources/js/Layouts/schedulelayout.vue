@@ -15,10 +15,18 @@ import TableComponent from '@/Components/ScheduleModal/TableComponent.vue';
 import MonthGridView from '@/Components/ScheduleModal/MonthGridView.vue';
 import TimeGridView from '@/Components/ScheduleModal/TimeGridView.vue';
 import EventViewerModal from '@/Components/ScheduleModal/EventViewerModal.vue';
+import {
+    demoRoomEquipmentsMap,
+    demoRoomEquipmentQuantitiesMap,
+    demoRoomEquipmentDetailsMap,
+    GLOBAL_DEMO_EQUIPMENT_QUANTITIES,
+} from '@/data/demoRoomEquipment.js';
 
 const props = defineProps({
     schedules: { type: Array, default: () => [] },
     rooms: { type: Array, default: () => [] },
+    roomEquipmentQuantities: { type: Object, default: () => ({}) },
+    globalEquipmentQuantities: { type: Object, default: () => ({}) },
     faculty: { type: Array, default: () => [] },
     requesters: { type: Array, default: () => [] },
     currentRequester: { type: String, default: '' },
@@ -227,7 +235,35 @@ const roomEquipmentsMap = computed(() => {
         if (room?.room_name) map[String(room.room_name).toLowerCase()] = parsed;
         if (room?.room_code) map[String(room.room_code).toLowerCase()] = parsed;
     });
-    return map;
+
+    return Object.keys(map).length > 0 ? map : demoRoomEquipmentsMap;
+});
+
+const roomEquipmentQuantitiesForModal = computed(() => {
+    const fromApi = props.roomEquipmentQuantities || {};
+    return Object.keys(fromApi).length > 0 ? fromApi : demoRoomEquipmentQuantitiesMap;
+});
+
+const globalEquipmentQuantitiesForModal = computed(() => {
+    const fromApi = props.globalEquipmentQuantities || {};
+    return Object.keys(fromApi).length > 0 ? fromApi : GLOBAL_DEMO_EQUIPMENT_QUANTITIES;
+});
+
+const roomEquipmentDetailsForModal = computed(() => {
+    const map = {};
+    (props.rooms || []).forEach((room) => {
+        const details = room?.equipment_details;
+        if (!Array.isArray(details) || !details.length) return;
+
+        [room.room_name, room.room_code]
+            .filter(Boolean)
+            .forEach((key) => {
+                map[key] = details;
+                map[String(key).toLowerCase()] = details;
+            });
+    });
+
+    return Object.keys(map).length > 0 ? map : demoRoomEquipmentDetailsMap;
 });
 
 // Layout State
@@ -293,7 +329,7 @@ const openAppointmentModal = (data = null, editing = null) => {
         visible: true,
         data: data || {
             selectedDate: new Date().toISOString().slice(0, 10),
-            initialRoom: availableRooms.value[0],
+            initialRoom: '',
             initialHour: 9,
             initialMinute: 0
         },
@@ -442,7 +478,7 @@ const handleEditEvent = (event) => {
     openAppointmentModal(
         {
             selectedDate: dateToIsoDateString(event.start),
-            initialRoom: event.extendedProps?.room || availableRooms.value[0],
+            initialRoom: event.extendedProps?.room || '',
             initialHour: event.allDay ? null : event.start.getHours(),
             initialMinute: event.allDay ? null : event.start.getMinutes()
         },
@@ -507,16 +543,16 @@ const confirmDeleteEvent = async () => {
 const handleDateClick = (date, hour = null, minute = null, position = null) => {
     openAppointmentModal({
         selectedDate: dateToIsoDateString(new Date(date)),
-        initialRoom: availableRooms.value[0] || '',
+        initialRoom: '',
         initialHour: hour ?? 9,
         initialMinute: minute ?? 0,
     });
 };
 
-const handleDirectAppointment = (room) => {
+const handleAddAppointment = () => {
     openAppointmentModal({
         selectedDate: dateToIsoDateString(new Date()),
-        initialRoom: room,
+        initialRoom: '',
         initialHour: 9,
         initialMinute: 0,
     });
@@ -591,7 +627,7 @@ watchEffect(() => {
                     @update:date="(date) => currentCalendarDate = date"
                     @update:mode="(mode) => currentCalendarMode = mode" @dateClicked="handleDateClick"
                     @selectEvent="openEventViewer" @editEvent="handleEditEvent" @deleteEvent="handleDeleteEvent"
-                    @addAppointment="() => handleDirectAppointment(availableRooms[0])" />
+                    @addAppointment="handleAddAppointment" />
             </main>
         </div>
 
@@ -602,6 +638,9 @@ watchEffect(() => {
             :rooms="availableRooms"
             :current-requester="props.currentRequester"
             :room-equipments-map="roomEquipmentsMap"
+            :room-equipment-quantities-map="roomEquipmentQuantitiesForModal"
+            :global-equipment-quantities="globalEquipmentQuantitiesForModal"
+            :room-equipment-details-map="roomEquipmentDetailsForModal"
             :initial-hour="modalState.appointment.data?.initialHour"
             :initial-minute="modalState.appointment.data?.initialMinute" :editing-event="modalState.appointment.editing"
             @close="() => closeModal('appointment')" @success="handleAppointmentSuccess" />

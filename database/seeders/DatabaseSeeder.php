@@ -83,6 +83,10 @@ class DatabaseSeeder extends Seeder
         $this->command->info('Creating rooms...');
         $rooms = Room::factory()->count(10)->create();
 
+        // Demo rooms with named equipment quantities (UG 114, AVR 201, etc.)
+        $this->command->info('Creating demo rooms with equipment quantities...');
+        $this->call(DemoRoomSeeder::class);
+
         // Create equipment (catalog + additional random records)
         $this->command->info('Creating equipment...');
         $this->call(EquipmentSeeder::class);

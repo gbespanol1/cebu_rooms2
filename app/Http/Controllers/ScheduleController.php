@@ -8,10 +8,15 @@ use App\Models\Term;
 use Inertia\Inertia;
 use App\Models\Schedule;
 use App\Models\UserAccount;
+use App\Services\EquipmentInventoryService;
 use Illuminate\Http\Request;
 
 class ScheduleController extends Controller
 {
+    public function __construct(
+        private readonly EquipmentInventoryService $equipmentInventory
+    ) {}
+
     public function index(Request $request)
     {
         $schedules = Schedule::with(['room.building', 'room.college', 'faculty', 'requester', 'term'])
@@ -19,7 +24,7 @@ class ScheduleController extends Controller
             ->orderBy('start_time', 'desc')
             ->get();
 
-        $rooms = Room::orderBy('room_name')->get();
+        $rooms = $this->roomsWithEquipmentDetails(Room::orderBy('room_name')->get());
         $faculty = UserAccount::where('user_type', 'faculty')->get();
         $requesters = UserAccount::whereIn('user_type', ['faculty', 'staff'])->get();
         $terms = Term::where('status', 'active')->get();
@@ -39,10 +44,87 @@ class ScheduleController extends Controller
         return Inertia::render('Schedule', [
             'schedules' => $schedules,
             'rooms' => $rooms,
+            'roomEquipmentQuantities' => $this->buildRoomEquipmentQuantitiesMap($rooms),
+            'globalEquipmentQuantities' => $this->equipmentInventory->globalInventoryCountsByName(),
             'faculty' => $faculty,
             'requesters' => $requesters,
             'currentRequester' => $currentRequester,
             'terms' => $terms,
+        ]);
+    }
+
+    /**
+     * Attach equipment_details [{ name, quantity }] to each room for the appointment form.
+     */
+    private function roomsWithEquipmentDetails($rooms)
+    {
+        return $rooms->map(function (Room $room) {
+            $names = is_array($room->equipments) ? $room->equipments : [];
+            $room->setAttribute(
+                'equipment_details',
+                $this->equipmentInventory->equipmentDetailsForRoom($room->id, $names)
+            );
+
+            return $room;
+        });
+    }
+
+    private function buildRoomEquipmentQuantitiesMap($rooms): array
+    {
+        $map = [];
+
+        foreach ($rooms as $room) {
+            $details = $room->equipment_details ?? [];
+            if (! is_array($details) || $details === []) {
+                continue;
+            }
+
+            $entries = [];
+            foreach ($details as $item) {
+                $name = trim((string) ($item['name'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $entries[strtolower($name)] = (int) ($item['quantity'] ?? 0);
+            }
+
+            foreach (array_filter([
+                $room->room_name,
+                $room->room_code,
+                strtolower((string) $room->room_name),
+                strtolower((string) $room->room_code),
+            ]) as $alias) {
+                $map[$alias] = $entries;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Equipment list with available quantities for the appointment form.
+     */
+    public function roomEquipment(Request $request)
+    {
+        $roomName = trim((string) $request->query('room', ''));
+        if ($roomName === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Room is required.',
+                'equipment' => [],
+            ], 422);
+        }
+
+        $room = Room::query()
+            ->where('room_name', $roomName)
+            ->orWhere('room_code', $roomName)
+            ->first();
+
+        $names = is_array($room?->equipments) ? $room->equipments : [];
+
+        return response()->json([
+            'success' => true,
+            'equipment' => $this->equipmentInventory->equipmentDetailsForRoom($room?->id, $names),
         ]);
     }
 

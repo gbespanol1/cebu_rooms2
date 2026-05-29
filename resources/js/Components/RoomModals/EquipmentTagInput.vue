@@ -40,7 +40,7 @@
         ref="inputRef"
         v-model="query"
         type="text"
-        class="equipment-input !border-0 !shadow-none !ring-0 focus:!ring-0 focus:!border-0"
+        class="equipment-input"
         :placeholder="modelValue.length ? '' : placeholder"
         autocomplete="off"
         @input="onInput"
@@ -51,7 +51,7 @@
     </div>
 
     <p v-if="!disabled" class="mt-1 text-xs text-gray-500">
-      Type to search inventory. Select from suggestions only.
+      Type to search equipment. Select from suggestions only.
     </p>
 
     <!-- Suggestion dropdown -->
@@ -95,7 +95,7 @@
           <span class="equipment-dropdown__text">
             <span class="equipment-dropdown__name" v-html="highlightMatch(item.name, query)" />
             <span class="equipment-dropdown__meta">
-              {{ item.inventory_count }} in inventory
+              {{ formatEquipmentAvailability(item.inventory_count) }}
             </span>
           </span>
         </li>
@@ -120,7 +120,7 @@
             <div>
               <h4 id="equipment-validation-title" class="text-lg font-semibold text-gray-900">Invalid equipment</h4>
               <p class="mt-2 text-sm text-gray-600">
-                <strong>"{{ invalidEntry }}"</strong> is not in the equipment inventory.
+                <strong>"{{ invalidEntry }}"</strong> is not a registered equipment type.
                 Please choose an item from the suggestions dropdown.
               </p>
               <p v-if="invalidEntry" class="mt-2 text-xs text-gray-500">
@@ -150,6 +150,7 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import axios from 'axios'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { getEquipmentIcon, getEquipmentIconStyle } from '@/utils/equipmentIcons'
+import { formatEquipmentAvailability } from '@/utils/equipmentAvailability.js'
 
 const props = defineProps({
   modelValue: {
@@ -473,7 +474,7 @@ onBeforeUnmount(() => {
 }
 
 .equipment-input-wrap--focused {
-  @apply border-blue-500;
+  @apply border-blue-500 ring-2 ring-blue-500/20;
 }
 
 .equipment-input-wrap--disabled {
@@ -492,22 +493,9 @@ onBeforeUnmount(() => {
   @apply text-gray-500 hover:text-gray-800 leading-none text-base ml-0.5;
 }
 
-/* Override @tailwindcss/forms so only the wrapper shows one border */
+/* Inner field is borderless; only the wrapper shows the highlight */
 .equipment-input {
-  @apply flex-1 min-w-[120px] text-sm py-1 px-0 m-0 bg-transparent;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  --tw-ring-shadow: 0 0 #0000 !important;
-  --tw-ring-offset-shadow: 0 0 #0000 !important;
-}
-
-.equipment-input:focus,
-.equipment-input:focus-visible {
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  --tw-ring-shadow: 0 0 #0000 !important;
+  @apply flex-1 min-w-[120px] text-sm py-1 px-0 m-0 bg-transparent outline-none;
 }
 
 .equipment-dropdown {
@@ -548,5 +536,21 @@ onBeforeUnmount(() => {
 
 .btn-ok {
   @apply bg-[#7A0C23] text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90;
+}
+</style>
+
+<!-- Unscoped: beat @tailwindcss/forms default input border/ring on focus -->
+<style>
+.equipment-input-wrap .equipment-input,
+.equipment-input-wrap .equipment-input:focus,
+.equipment-input-wrap .equipment-input:focus-visible {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-width: 0 !important;
+  --tw-ring-width: 0 !important;
 }
 </style>
