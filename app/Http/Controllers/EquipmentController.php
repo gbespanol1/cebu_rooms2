@@ -547,4 +547,107 @@ class EquipmentController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Autocomplete suggestions for room equipment picker (per keystroke).
+     */
+    public function suggestions(Request $request)
+    {
+        try {
+            $query = trim((string) $request->query('q', ''));
+
+            if ($query === '') {
+                return response()->json([
+                    'success' => true,
+                    'data' => [],
+                ]);
+            }
+
+            $exclude = $request->query('exclude', []);
+            if (is_string($exclude)) {
+                $exclude = array_filter(array_map('trim', explode(',', $exclude)));
+            }
+            if (!is_array($exclude)) {
+                $exclude = [];
+            }
+
+            $excludeLower = array_map(fn ($name) => strtolower((string) $name), $exclude);
+
+            $suggestions = Equipment::query()
+                ->select('equipment_name', DB::raw('MIN(id) as id'), DB::raw('COUNT(*) as inventory_count'))
+                ->where('equipment_name', 'like', '%' . $query . '%')
+                ->groupBy('equipment_name')
+                ->orderBy('equipment_name')
+                ->limit(10)
+                ->get()
+                ->filter(function ($item) use ($excludeLower) {
+                    return !in_array(strtolower($item->equipment_name), $excludeLower, true);
+                })
+                ->values()
+                ->map(function ($item) use ($query) {
+                    return [
+                        'id' => (int) $item->id,
+                        'name' => $item->equipment_name,
+                        'inventory_count' => (int) $item->inventory_count,
+                        'match' => $query,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $suggestions,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch equipment suggestions.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Validate equipment names against the inventory catalog.
+     */
+    public function validateNames(Request $request)
+    {
+        try {
+            $names = $request->input('names', []);
+            if (!is_array($names)) {
+                $names = [$names];
+            }
+
+            $invalid = [];
+            $valid = [];
+
+            foreach ($names as $name) {
+                $trimmed = trim((string) $name);
+                if ($trimmed === '') {
+                    continue;
+                }
+
+                $exists = Equipment::query()
+                    ->whereRaw('LOWER(equipment_name) = ?', [strtolower($trimmed)])
+                    ->exists();
+
+                if ($exists) {
+                    $valid[] = $trimmed;
+                } else {
+                    $invalid[] = $trimmed;
+                }
+            }
+
+            return response()->json([
+                'success' => empty($invalid),
+                'valid' => array_values(array_unique($valid)),
+                'invalid' => array_values(array_unique($invalid)),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to validate equipment names.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

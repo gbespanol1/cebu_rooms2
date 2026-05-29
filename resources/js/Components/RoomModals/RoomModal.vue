@@ -115,10 +115,12 @@
           </div>
 
           <!-- Equipments -->
-          <div>
-            <label class="block text-sm font-medium">Equipments</label>
-            <textarea v-model="form.equipments" rows="2" class="input" :readonly="isView" />
-          </div>
+          <EquipmentTagInput
+            v-model="equipmentList"
+            label="Equipments"
+            placeholder="Type equipment name (e.g. TV, Chairs)…"
+            :disabled="isView"
+          />
         </template>
 
         <!-- DELETE CONFIRM -->
@@ -168,6 +170,7 @@
 import { computed, watch, ref } from 'vue'
 import { useForm, usePage, router } from '@inertiajs/vue3'
 import MessageFunction from '@/Components/MessageFunction.vue'
+import EquipmentTagInput from '@/Components/RoomModals/EquipmentTagInput.vue'
 
 const props = defineProps({
   type: String,
@@ -218,7 +221,21 @@ const form = useForm({
   location: '',
   capacity: 0,
   description: '',
-  equipments: '',
+  equipments: [],
+})
+
+const equipmentList = computed({
+  get() {
+    const value = form.equipments
+    if (Array.isArray(value)) return value
+    if (typeof value === 'string' && value.trim()) {
+      return value.split(/[\r\n,;]+/).map((s) => s.trim()).filter(Boolean)
+    }
+    return []
+  },
+  set(list) {
+    form.equipments = list
+  },
 })
 
 // Populate on edit/view
@@ -252,12 +269,19 @@ const submit = () => {
 
   const method = props.type === 'edit' ? 'put' : 'post'
 
+  form.equipments = equipmentList.value
+
   form[method](url, {
     onSuccess: () => {
       setTimeout(() => emit('close'), 1500)
     },
-    onError: () => {
-      errorMessage.value = 'Failed to save room.'
+    onError: (errors) => {
+      const equipmentError = Object.entries(errors || {}).find(([key]) =>
+        key.startsWith('equipments')
+      )
+      errorMessage.value = equipmentError
+        ? equipmentError[1]
+        : 'Failed to save room. Check that all equipment items are valid.'
       showError.value = true
       setTimeout(() => (showError.value = false), 5000)
     },

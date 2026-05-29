@@ -73,6 +73,8 @@ Route::middleware(['auth.session'])->group(function () {
     // Equipment API Routes
     Route::prefix('/api/equipment')->group(function () {
         Route::get('/', [EquipmentController::class, 'getAll']);
+        Route::get('/suggestions', [EquipmentController::class, 'suggestions']);
+        Route::post('/validate-names', [EquipmentController::class, 'validateNames']);
         Route::get('/stats', [EquipmentController::class, 'getStats']);
         Route::get('/usage', [EquipmentController::class, 'getEquipmentUsage']);
         Route::post('/', [EquipmentController::class, 'store']);

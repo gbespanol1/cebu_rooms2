@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\NormalizesRoomEquipments;
+use App\Rules\ValidEquipmentCatalogName;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreRoomRequest extends FormRequest
 {
+    use NormalizesRoomEquipments;
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -33,7 +36,8 @@ class StoreRoomRequest extends FormRequest
             'location'          => 'nullable|string|max:255',
             'capacity'          => 'required|integer|min:1',
             'description'       => 'nullable|string',
-            'equipments'        => 'nullable',
+            'equipments'   => 'nullable|array',
+            'equipments.*' => ['required', 'string', 'max:100', new ValidEquipmentCatalogName()],
         ];
     }
 }
