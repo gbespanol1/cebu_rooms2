@@ -1,13 +1,16 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
-import { faEye, faPenToSquare, faTrash, faClock, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faPenToSquare, faTrash, faClock, faChevronLeft, faChevronRight, faClipboardList } from '@fortawesome/free-solid-svg-icons';
+import { isFinalAppointmentStatus, APPOINTMENT_STATUS_OPTIONS, getAppointmentStatusMeta, normalizeAppointmentStatus, getCurrentStatusPanelClass, isStatusTransitionDisabled, getAppointmentStatusLabel, getAppointmentStatusTextClass } from '@/utils/scheduleStatus';
+import StatusBadge from '@/Components/ScheduleModal/StatusBadge.vue';
 
 const icons = {
     eye: faEye,
     edit: faPenToSquare,
     delete: faTrash,
     clock: faClock,
+    clipboardList: faClipboardList,
     chevronLeft: faChevronLeft,
     chevronRight: faChevronRight,
 };
@@ -16,6 +19,10 @@ const props = defineProps({
     events: {
         type: Array,
         required: true
+    },
+    isAdmin: {
+        type: Boolean,
+        default: false
     }
 });
 
@@ -23,8 +30,117 @@ const emit = defineEmits([
     'view-details',
     'edit-event',
     'delete-event',
+    'update-status',
     'row-clicked'
 ]);
+
+const statusModal = ref({
+    visible: false,
+    event: null,
+    selectedStatus: 'pending',
+    loading: false,
+});
+
+const statusConfirm = ref({
+    visible: false,
+});
+
+const statusOptions = APPOINTMENT_STATUS_OPTIONS;
+
+const openStatusModal = (eventObject, e) => {
+    e.stopPropagation();
+    if (isFinalAppointmentStatus(eventObject.extendedProps?.status)) {
+        return;
+    }
+    statusModal.value = {
+        visible: true,
+        event: eventObject,
+        selectedStatus: eventObject.extendedProps?.status || 'pending',
+        loading: false,
+    };
+};
+
+const closeStatusModal = () => {
+    if (statusModal.value.loading) return;
+    statusConfirm.value.visible = false;
+    statusModal.value = { visible: false, event: null, selectedStatus: 'pending', loading: false };
+};
+
+const openStatusConfirm = () => {
+    if (!statusModal.value.event) return;
+    if (isBlockedStatusOption(statusModal.value.selectedStatus)) return;
+    statusConfirm.value.visible = true;
+};
+
+const closeStatusConfirm = () => {
+    if (statusModal.value.loading) return;
+    statusConfirm.value.visible = false;
+};
+
+const confirmStatusChange = async () => {
+    if (!statusModal.value.event) return;
+    if (isBlockedStatusOption(statusModal.value.selectedStatus)) return;
+    statusModal.value.loading = true;
+    emit('update-status', {
+        event: statusModal.value.event,
+        status: statusModal.value.selectedStatus,
+        onComplete: () => {
+            statusModal.value.loading = false;
+            statusConfirm.value.visible = false;
+            closeStatusModal();
+        },
+        onError: () => {
+            statusModal.value.loading = false;
+        },
+    });
+};
+
+const selectedStatusLabel = computed(() => (
+    getAppointmentStatusLabel(statusModal.value.selectedStatus)
+));
+
+const currentStatusLabel = computed(() => (
+    getAppointmentStatusLabel(currentAppointmentStatus.value)
+));
+
+const getStatusMeta = (status) => getAppointmentStatusMeta(status);
+
+const currentAppointmentStatus = computed(() => (
+    normalizeAppointmentStatus(statusModal.value.event?.extendedProps?.status)
+));
+
+const isCurrentStatusOption = (value) => (
+    normalizeAppointmentStatus(value) === currentAppointmentStatus.value
+);
+
+const isBlockedStatusOption = (value) => (
+    isStatusTransitionDisabled(currentAppointmentStatus.value, value)
+);
+
+const selectStatusOption = (value) => {
+    if (isBlockedStatusOption(value)) return;
+    statusModal.value.selectedStatus = value;
+};
+
+const getStatusOptionPanelClass = (option) => {
+    const isCurrent = isCurrentStatusOption(option.value);
+    const isBlocked = isBlockedStatusOption(option.value);
+    const isSelected = statusModal.value.selectedStatus === option.value;
+
+    if (isCurrent) {
+        return `${getCurrentStatusPanelClass(option.value)} cursor-default`;
+    }
+
+    if (isBlocked) {
+        return 'border-gray-200 bg-gray-50 cursor-not-allowed';
+    }
+
+    if (isSelected) {
+        return `border-[#7A0C23] ring-2 ${getStatusMeta(option.value).ringClass}`;
+    }
+
+    return 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50';
+};
 
 // Pagination state
 const currentPage = ref(1);
@@ -113,7 +229,8 @@ const processedEvents = computed(() => {
             type: event.list || 'Event',
             isOccupied: true,
             requester: extendedProps.requester || 'N/A',
-            description: extendedProps.description || ''
+            description: extendedProps.description || '',
+            status: extendedProps.status || 'pending',
         };
     });
 });
@@ -192,7 +309,8 @@ const resetPagination = () => {
                     <col style="width: 12%;"> <!-- COLLEGE -->
                     <col style="width: 10%;"> <!-- START DATE -->
                     <col style="width: 10%;"> <!-- TIME SLOT -->
-                    <col style="width: 10%;"> <!-- EVENT TYPE -->
+                    <col style="width: 9%;">  <!-- EVENT TYPE -->
+                    <col style="width: 9%;">  <!-- STATUS -->
                     <col style="width: 14%;"> <!-- ACTIONS -->
                 </colgroup>
                 <thead class="bg-[#7A0C23] text-white">
@@ -204,6 +322,7 @@ const resetPagination = () => {
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">START DATE</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">TIME SLOT</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">EVENT TYPE</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">STATUS</th>
                         <th class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">ACTIONS</th>
                     </tr>
                 </thead>
@@ -261,9 +380,29 @@ const resetPagination = () => {
                             </span>
                         </td>
 
+                        <!-- STATUS Column -->
+                        <td class="px-4 py-4 status-cell">
+                            <StatusBadge :status="item.status" />
+                        </td>
+
                         <!-- ACTIONS Column -->
                         <td class="px-4 py-4">
-                            <div class="flex items-center justify-center space-x-3" @click.stop>
+                            <div class="flex items-center justify-center space-x-2" @click.stop>
+                                <button
+                                    v-if="isAdmin && !isFinalAppointmentStatus(item.status)"
+                                    @click="openStatusModal(item.eventObject, $event)"
+                                    title="Change Status"
+                                    class="text-amber-600 hover:text-amber-800 transition-transform hover:scale-110"
+                                >
+                                    <FontAwesomeIcon :icon="icons.clipboardList" class="h-5 w-5" />
+                                </button>
+                                <span
+                                    v-else-if="isAdmin && isFinalAppointmentStatus(item.status)"
+                                    title="Status is closed and cannot be changed"
+                                    class="text-gray-300 cursor-not-allowed inline-flex"
+                                >
+                                    <FontAwesomeIcon :icon="icons.clipboardList" class="h-5 w-5" />
+                                </span>
                                 <button
                                     @click="handleAction('view-details', item.eventObject, $event)"
                                     title="View Details"
@@ -290,7 +429,7 @@ const resetPagination = () => {
                     </tr>
 
                     <tr v-if="processedEvents.length === 0">
-                        <td :colspan="8" class="px-6 py-8 text-center text-gray-500">
+                        <td :colspan="9" class="px-6 py-8 text-center text-gray-500">
                             <div class="flex flex-col items-center">
                                 <svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
@@ -363,6 +502,130 @@ const resetPagination = () => {
                 Page {{ currentPage }} of {{ totalPages }}
             </div>
         </div>
+
+        <!-- Status change modal -->
+        <div
+            v-if="statusModal.visible"
+            class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50"
+            @click.self="closeStatusModal"
+        >
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[min(90vh,36rem)] overflow-hidden" @click.stop>
+                <div class="shrink-0 bg-[#7A0C23] px-5 py-4">
+                    <h3 class="text-lg font-semibold text-white leading-tight">
+                        Change Appointment Status
+                    </h3>
+                    <div class="mt-3 pt-3 border-t border-white/20 flex items-start justify-between gap-4">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-[10px] font-medium uppercase tracking-wider text-white/60">
+                                Appointment
+                            </p>
+                            <p class="text-sm font-medium text-white mt-0.5 truncate">
+                                {{ statusModal.event?.title || 'Untitled appointment' }}
+                            </p>
+                        </div>
+                        <div class="flex flex-col items-end gap-1.5 shrink-0">
+                            <p class="text-[10px] font-medium uppercase tracking-wider text-white/60">
+                                Current status
+                            </p>
+                            <StatusBadge
+                                :status="currentAppointmentStatus"
+                                size="md"
+                                :show-dot="true"
+                                variant="header"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+                    <p class="text-xs font-medium text-gray-500 mb-3">Select new status</p>
+                    <div class="space-y-2">
+                    <button
+                        v-for="option in statusOptions"
+                        :key="option.value"
+                        type="button"
+                        class="status-option-btn w-full text-left rounded-lg border p-3 transition text-gray-900"
+                        :class="getStatusOptionPanelClass(option)"
+                        :aria-disabled="isBlockedStatusOption(option.value)"
+                        @click="selectStatusOption(option.value)"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <StatusBadge
+                                :status="option.value"
+                                size="md"
+                                :show-dot="true"
+                                :muted="isCurrentStatusOption(option.value)"
+                                variant="default"
+                            />
+                        </div>
+                        <p class="text-xs text-gray-600 mt-2">{{ option.description }}</p>
+                    </button>
+                    </div>
+                </div>
+
+                <div class="shrink-0 px-5 py-3 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+                    <button
+                        type="button"
+                        class="px-4 py-2 rounded-lg font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50"
+                        :disabled="statusModal.loading"
+                        @click="closeStatusModal"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        class="px-4 py-2 rounded-lg font-medium text-white bg-[#7A0C23] hover:opacity-90 transition disabled:opacity-50"
+                        :disabled="statusModal.loading || isBlockedStatusOption(statusModal.selectedStatus)"
+                        @click="openStatusConfirm"
+                    >
+                        {{ statusModal.loading ? 'Saving...' : 'Save Status' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status change confirmation -->
+        <div
+            v-if="statusConfirm.visible"
+            class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50"
+            @click.self="closeStatusConfirm"
+        >
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" @click.stop>
+                <div class="bg-[#7A0C23] px-6 py-4">
+                    <h3 class="text-xl font-semibold text-white">Confirm Status Change</h3>
+                </div>
+
+                <div class="p-6">
+                    <p class="text-center text-gray-700 mb-4">
+                        Are you sure you want to change the status of
+                        <strong class="text-[#7A0C23]">{{ statusModal.event?.title || 'this appointment' }}</strong>
+                        from
+                        <strong :class="getAppointmentStatusTextClass(currentAppointmentStatus)">{{ currentStatusLabel }}</strong>
+                        to
+                        <strong :class="getAppointmentStatusTextClass(statusModal.selectedStatus)">{{ selectedStatusLabel }}</strong>?
+                    </p>
+
+                    <div class="flex justify-end gap-3 pt-2 border-t">
+                        <button
+                            type="button"
+                            class="px-4 py-2 rounded-lg font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition disabled:opacity-50"
+                            :disabled="statusModal.loading"
+                            @click="closeStatusConfirm"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="px-4 py-2 rounded-lg font-medium text-white bg-[#7A0C23] hover:opacity-90 transition disabled:opacity-50"
+                            :disabled="statusModal.loading"
+                            @click="confirmStatusChange"
+                        >
+                            {{ statusModal.loading ? 'Saving...' : 'Yes, Change Status' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -379,6 +642,16 @@ th, td {
     white-space: nowrap;
 }
 
+/* Status & actions: no ellipsis (avoids ".." after badges/buttons) */
+td:nth-child(8),
+th:nth-child(8),
+td:nth-child(9),
+th:nth-child(9) {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+}
+
 /* Allow truncation with tooltip */
 .truncate {
     overflow: hidden;
@@ -393,8 +666,9 @@ td:nth-child(3), th:nth-child(3) { width: 12%; }
 td:nth-child(4), th:nth-child(4) { width: 12%; }
 td:nth-child(5), th:nth-child(5) { width: 10%; }
 td:nth-child(6), th:nth-child(6) { width: 10%; }
-td:nth-child(7), th:nth-child(7) { width: 10%; }
-td:nth-child(8), th:nth-child(8) { width: 14%; }
+td:nth-child(7), th:nth-child(7) { width: 9%; }
+td:nth-child(8), th:nth-child(8) { width: 11%; }
+td:nth-child(9), th:nth-child(9) { width: 12%; }
 
 /* Action buttons container */
 .flex.items-center.justify-center.space-x-3 {

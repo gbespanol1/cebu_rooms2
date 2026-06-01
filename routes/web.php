@@ -12,6 +12,7 @@ use App\Http\Controllers\RoomTypeController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\ScheduleNotificationController;
 use App\Http\Controllers\TermController;
 use App\Http\Controllers\UserAccountController;
 use App\Http\Controllers\DashboardController;
@@ -87,7 +88,13 @@ Route::middleware(['auth.session'])->group(function () {
     Route::get('/Schedule/room-equipment', [ScheduleController::class, 'roomEquipment'])->name('schedules.room-equipment');
     Route::post('/Schedule', [ScheduleController::class, 'store'])->name('schedules.store');
     Route::put('/Schedule/{schedule}', [ScheduleController::class, 'update'])->name('schedules.update');
+    Route::patch('/Schedule/{schedule}/status', [ScheduleController::class, 'updateStatus'])->name('schedules.update-status');
     Route::delete('/Schedule/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
+    Route::get('/api/schedule-notifications', [ScheduleNotificationController::class, 'index'])->name('schedule-notifications.index');
+    Route::patch('/api/schedule-notifications/read-all', [ScheduleNotificationController::class, 'markAllRead'])->name('schedule-notifications.read-all');
+    Route::patch('/api/schedule-notifications/unread-all', [ScheduleNotificationController::class, 'markAllUnread'])->name('schedule-notifications.unread-all');
+    Route::delete('/api/schedule-notifications/clear-all', [ScheduleNotificationController::class, 'clearAll'])->name('schedule-notifications.clear-all');
+    Route::patch('/api/schedule-notifications/{notification}/read', [ScheduleNotificationController::class, 'markRead'])->name('schedule-notifications.read');
 
     // Terms Management
     Route::get('/Terms', [TermController::class, 'index'])->name('terms.index');

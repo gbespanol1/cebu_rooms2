@@ -15,18 +15,19 @@
       </div>
 
       <!-- Right -->
-     
+      <AppointmentNotificationBell />
     </div>
   </header>
 </template>
 
 <script setup>
 import { Link } from '@inertiajs/vue3'
+import AppointmentNotificationBell from '@/Components/AppointmentNotificationBell.vue'
 
 defineProps({
   user: {
     type: Object,
     default: () => ({})
-  }
+  },
 });
 </script>

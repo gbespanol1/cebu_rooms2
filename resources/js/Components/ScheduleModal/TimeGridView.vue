@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import { faTag, faLock, faClock } from '@fortawesome/free-solid-svg-icons';
 
@@ -15,6 +15,13 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['selectEvent', 'selectDate', 'emitDateClick']);
+
+const clusterModal = ref({
+    visible: false,
+    date: '',
+    slot: '',
+    events: []
+});
 
 const daysToRender = computed(() => {
     return props.viewMode === 'day' ? [props.singleDay] : props.weekDays;
@@ -111,9 +118,14 @@ const handleTimeSlotClick = (day, slot, clickEvent) => {
     if (isTimeSlotOccupied(day, slot)) {
         const overlappingEvents = getOverlappingEvents(day, slot);
         if (overlappingEvents.length > 0) {
-            const eventNames = overlappingEvents.map(e => e.title || e.extendedProps?.subject).join(', ');
-            const eventRooms = overlappingEvents.map(e => e.extendedProps?.room).join(', ');
-            alert(`This time slot is already occupied by:\n\n${eventNames}\nRooms: ${eventRooms}\n\nPlease choose another time.`);
+            clusterModal.value = {
+                visible: true,
+                date: formatDateDisplay(day.date),
+                slot: formatSlotTime(slot.hour, slot.minute),
+                events: overlappingEvents
+                    .slice()
+                    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+            };
             return;
         }
     }
@@ -124,6 +136,20 @@ const handleTimeSlotClick = (day, slot, clickEvent) => {
         ? { x: clickEvent.clientX, y: clickEvent.clientY }
         : null;
     emit('emitDateClick', exactDate, slot.hour, slot.minute, position);
+};
+
+const closeClusterModal = () => {
+    clusterModal.value = {
+        visible: false,
+        date: '',
+        slot: '',
+        events: []
+    };
+};
+
+const handleClusterEventClick = (event) => {
+    emit('selectEvent', event);
+    closeClusterModal();
 };
 
 // Get occupancy tooltip text
@@ -266,7 +292,7 @@ const formatSlotTime = (hour, minute) => {
                         :key="slotIndex"
                         @click="handleTimeSlotClick(day, slot, $event)"
                         :class="[
-                            'h-12 transition duration-100 cursor-pointer relative group',
+                            'h-12 transition duration-100 cursor-default relative group',
                             getOccupancyColor(day, slot),
                             slot.minute === 0 ? 'border-t-2 border-gray-300' : 'border-t border-dashed border-gray-200'
                         ]"
@@ -288,9 +314,9 @@ const formatSlotTime = (hour, minute) => {
                         v-for="event in day.events"
                         :key="event.id"
                         @click="emit('selectEvent', event)"
-                        class="absolute left-1 right-1 mx-0.5 px-2 py-1 rounded-lg cursor-pointer text-white shadow-md z-20 overflow-hidden border-l-4"
+                        class="absolute left-1 right-1 mx-0.5 px-2 py-1 rounded-lg cursor-pointer text-white shadow-md z-20 overflow-hidden border-l-4 select-none"
                         :class="[getEventColor(event)]"
-                        :style="props.getEventStyle(event)"
+                        :style="props.getEventStyle(event, day.events)"
                         :title="`${props.formatEventTime(event)}: ${event.title || event.extendedProps?.subject} - ${event.extendedProps?.room || 'Unknown Room'}`"
                     >
                         <p class="text-xs font-bold leading-tight truncate">
@@ -333,6 +359,57 @@ const formatSlotTime = (hour, minute) => {
                 <div class="flex items-center ml-4 text-gray-600">
                     <FontAwesomeIcon :icon="faLock" class="w-3 h-3 mr-1" />
                     <span>Hover over occupied slots for details</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cluster modal for overlapping events -->
+        <div
+            v-if="clusterModal.visible"
+            class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50"
+            @click.self="closeClusterModal"
+        >
+            <div class="w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+                <div class="bg-[#7A0C23] px-5 py-4 text-white">
+                    <h3 class="text-lg font-semibold">Occupied Slot Details</h3>
+                    <p class="text-sm opacity-90">{{ clusterModal.date }} | {{ clusterModal.slot }}</p>
+                </div>
+
+                <div class="px-5 py-3 border-b bg-gray-50 text-xs text-gray-600 font-medium">
+                    {{ clusterModal.events.length }} schedule(s) in this slot
+                </div>
+
+                <div class="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                    <button
+                        v-for="event in clusterModal.events"
+                        :key="event.id"
+                        type="button"
+                        class="w-full text-left rounded-xl border border-gray-200 bg-white p-4 hover:border-[#7A0C23]/30 hover:shadow-sm transition"
+                        @click="handleClusterEventClick(event)"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <p class="text-base font-semibold text-gray-900 truncate">
+                                {{ event.title || event.extendedProps?.subject || 'Untitled' }}
+                            </p>
+                            <span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-[#7A0C23]/10 text-[#7A0C23] whitespace-nowrap">
+                                {{ event.extendedProps?.type || 'Event' }}
+                            </span>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-700 space-y-1">
+                            <p><span class="font-semibold">Time</span>: {{ props.formatEventTime(event) }}</p>
+                            <p><span class="font-semibold">Room</span>: {{ event.extendedProps?.room || 'N/A' }}</p>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="px-4 py-3 border-t flex justify-end">
+                    <button
+                        type="button"
+                        class="px-4 py-2 rounded-lg text-white bg-[#7A0C23] hover:opacity-90 transition"
+                        @click="closeClusterModal"
+                    >
+                        Close
+                    </button>
                 </div>
             </div>
         </div>

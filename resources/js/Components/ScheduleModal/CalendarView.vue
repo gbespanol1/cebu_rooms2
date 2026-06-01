@@ -14,6 +14,7 @@ import {
     faEye,
     faClock
 } from '@fortawesome/free-solid-svg-icons';
+import StatusBadge from '@/Components/ScheduleModal/StatusBadge.vue';
 
 const props = defineProps({
     data: { type: Array, default: () => [] },
@@ -304,7 +305,7 @@ const hourSlots = computed(() => {
     return slots;
 });
 
-const getTimeEventStyle = (event) => {
+const getTimeEventStyle = (event, dayEvents = []) => {
     const start = new Date(event.start);
     const end = event.end ? new Date(event.end) : new Date(start.getTime() + 60 * 60000);
 
@@ -322,12 +323,36 @@ const getTimeEventStyle = (event) => {
     const rawHeightPx = visibleDuration * pxPerMinute - EVENT_INSET_PX * 2;
     const heightPx = Math.max(20, rawHeightPx);
 
+    const overlappingEvents = dayEvents
+        .filter((candidate) => {
+            const candidateStart = new Date(candidate.start);
+            const candidateEnd = candidate.end
+                ? new Date(candidate.end)
+                : new Date(candidateStart.getTime() + 60 * 60000);
+            return start < candidateEnd && end > candidateStart;
+        })
+        .sort((a, b) => {
+            const startDiff = new Date(a.start).getTime() - new Date(b.start).getTime();
+            if (startDiff !== 0) return startDiff;
+            return String(a.id).localeCompare(String(b.id));
+        });
+
+    const overlapCount = Math.max(overlappingEvents.length, 1);
+    const overlapIndex = Math.max(
+        overlappingEvents.findIndex((candidate) => candidate.id === event.id),
+        0
+    );
+    const gapPercent = 1.5;
+    const widthPercent = Math.max((100 - gapPercent * (overlapCount - 1)) / overlapCount, 18);
+    const leftPercent = overlapIndex * (widthPercent + gapPercent);
+
     return {
         top: `${topPx}px`,
         height: `${heightPx}px`,
-        left: '4px',
-        right: '4px',
-        zIndex: '20',
+        left: `${leftPercent}%`,
+        width: `${widthPercent}%`,
+        right: 'auto',
+        zIndex: `${20 + overlapIndex}`,
     };
 };
 
@@ -350,6 +375,7 @@ const tableEvents = computed(() => {
                 day: formatDay(event.start),
                 time: event.allDay ? 'All Day' : formatEventTimeForDisplay(event),
                 requestType: getRequestType(event),
+                status: event.extendedProps?.status || 'pending',
                 eventObject: event,
                 room: event.extendedProps?.room || 'N/A',
                 building: event.extendedProps?.building || 'N/A',
@@ -358,6 +384,7 @@ const tableEvents = computed(() => {
             };
         });
 });
+
 </script>
 
 <template>
@@ -400,6 +427,7 @@ const tableEvents = computed(() => {
                             <th class="px-6 py-3 text-left text-xs font-semibold uppercase">DAY</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold uppercase">TIME</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold uppercase">TYPE</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase">STATUS</th>
                             <th class="px-6 py-3 text-center text-xs font-semibold uppercase w-40">ACTIONS</th>
                         </tr>
                     </thead>
@@ -422,6 +450,9 @@ const tableEvents = computed(() => {
                                 <span :class="['px-2 py-1 rounded-full text-xs font-medium', item.requestType === 'Class' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800']">
                                     {{ item.requestType }}
                                 </span>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-700">
+                                <StatusBadge :status="item.status" />
                             </td>
                             <td class="px-6 py-4 text-sm font-medium text-center">
                                 <div class="flex items-center justify-center space-x-3" @click.stop>
@@ -450,7 +481,7 @@ const tableEvents = computed(() => {
                             </td>
                         </tr>
                         <tr @click="handleAddRowClick" class="bg-green-50/50 hover:bg-green-100 cursor-pointer transition">
-                            <td colspan="7" class="px-6 py-4 text-center text-green-700 font-semibold text-base">
+                            <td colspan="8" class="px-6 py-4 text-center text-green-700 font-semibold text-base">
                                 <FontAwesomeIcon :icon="listIcons.add" class="mr-2" /> Schedule new appointment...
                             </td>
                         </tr>

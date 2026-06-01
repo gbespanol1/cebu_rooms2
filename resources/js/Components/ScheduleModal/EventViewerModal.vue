@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { formatDateDisplay, formatTimeDisplay } from './utils/scheduleHelpers';
+import StatusBadge from '@/Components/ScheduleModal/StatusBadge.vue';
 
 const props = defineProps({
     isVisible: Boolean,
@@ -10,15 +11,6 @@ const props = defineProps({
 defineEmits(['close', 'edit', 'delete']);
 
 const ext = computed(() => props.event?.extendedProps || {});
-
-const statusBadgeClass = computed(() => {
-    const status = (ext.value.status || '').toLowerCase();
-    if (status === 'approved') return 'bg-green-100 text-green-800';
-    if (status === 'pending') return 'bg-yellow-100 text-yellow-800';
-    if (status === 'cancelled') return 'bg-red-100 text-red-800';
-    if (status === 'completed') return 'bg-gray-200 text-gray-700';
-    return 'bg-gray-100 text-gray-700';
-});
 
 const hasValue = (v) => {
     if (v === null || v === undefined) return false;
@@ -43,12 +35,11 @@ const hasValue = (v) => {
                 <div class="bg-gray-50 p-4 rounded-lg">
                     <div class="flex items-start justify-between mb-2 gap-3">
                         <h4 class="text-lg font-bold text-[#7A0C23]">{{ event.title }}</h4>
-                        <span
+                        <StatusBadge
                             v-if="ext.status"
-                            :class="['text-xs px-2 py-1 rounded-full font-semibold capitalize whitespace-nowrap', statusBadgeClass]"
-                        >
-                            {{ ext.status }}
-                        </span>
+                            :status="ext.status"
+                            size="md"
+                        />
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>

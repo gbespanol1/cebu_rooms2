@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 // ==============================
 // PROPS
 // ==============================
@@ -17,17 +18,58 @@ const props = defineProps({
 // dayClick → highlight/select day
 const emit = defineEmits(['emitDateClick', 'selectEvent', 'dayClick'])
 
+const clusterModal = ref({
+    visible: false,
+    date: '',
+    events: []
+})
+
 // ==============================
 // HANDLE DAY CLICK
 // ==============================
 // Fires when user clicks a calendar cell
 // Emits the clicked date with default time (9:00 AM)
-const handleDateClick = (date) => {
-    emit('dayClick', date) // notify parent of day click
+const formatDateDisplay = (date) => {
+    const d = new Date(date)
+    return d.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    })
+}
 
-    const exactDate = new Date(date)
+const closeClusterModal = () => {
+    clusterModal.value = {
+        visible: false,
+        date: '',
+        events: []
+    }
+}
+
+const handleClusterEventClick = (event) => {
+    emit('selectEvent', event)
+    closeClusterModal()
+}
+
+const handleDateClick = (day) => {
+    emit('dayClick', day.date) // notify parent of day click
+
+    const dayEvents = [...(day.allDayEvents || []), ...(day.events || [])]
+
+    if (dayEvents.length > 0) {
+        clusterModal.value = {
+            visible: true,
+            date: formatDateDisplay(day.date),
+            events: dayEvents
+                .slice()
+                .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+        }
+        return
+    }
+
+    const exactDate = new Date(day.date)
     exactDate.setHours(9, 0, 0, 0) // default appointment time
-
     emit('emitDateClick', exactDate)
 }
 
@@ -51,6 +93,12 @@ const formatTime = (date) => {
         minute: '2-digit',
         hour12: true
     })
+}
+
+const formatEventTime = (event) => {
+    const start = new Date(event.start)
+    const end = event.end ? new Date(event.end) : new Date(start.getTime() + 60 * 60000)
+    return `${formatTime(start)} - ${formatTime(end)}`
 }
 
 // ==============================
@@ -90,7 +138,7 @@ const truncateText = (text, maxLength) => {
                     <td
                         v-for="day in week"
                         :key="new Date(day.date).toISOString()"
-                        @click="handleDateClick(day.date)"
+                        @click="handleDateClick(day)"
                         class="p-0 border border-yellow-400 align-top cursor-pointer relative"
                         :class="[
                             day.dayClass,
@@ -169,6 +217,57 @@ const truncateText = (text, maxLength) => {
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- Cluster modal for month view day click -->
+    <div
+        v-if="clusterModal.visible"
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/50"
+        @click.self="closeClusterModal"
+    >
+        <div class="w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+            <div class="bg-[#7A0C23] px-5 py-4 text-white">
+                <h3 class="text-lg font-semibold">Day Schedule</h3>
+                <p class="text-sm opacity-90">{{ clusterModal.date }}</p>
+            </div>
+
+            <div class="px-5 py-3 border-b bg-gray-50 text-xs text-gray-600 font-medium">
+                {{ clusterModal.events.length }} schedule(s) found
+            </div>
+
+            <div class="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                <button
+                    v-for="event in clusterModal.events"
+                    :key="event.id"
+                    type="button"
+                    class="w-full text-left rounded-xl border border-gray-200 bg-white p-4 hover:border-[#7A0C23]/30 hover:shadow-sm transition"
+                    @click="handleClusterEventClick(event)"
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="text-base font-semibold text-gray-900 truncate">
+                            {{ event.title || event.extendedProps?.subject || 'Untitled' }}
+                        </p>
+                        <span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-[#7A0C23]/10 text-[#7A0C23] whitespace-nowrap">
+                            {{ event.extendedProps?.type || 'Event' }}
+                        </span>
+                    </div>
+                    <div class="mt-2 text-xs text-gray-700 space-y-1">
+                        <p><span class="font-semibold">Time</span>: {{ event.allDay ? 'All Day' : formatEventTime(event) }}</p>
+                        <p><span class="font-semibold">Room</span>: {{ event.extendedProps?.room || 'N/A' }}</p>
+                    </div>
+                </button>
+            </div>
+
+            <div class="px-4 py-3 border-t flex justify-end">
+                <button
+                    type="button"
+                    class="px-4 py-2 rounded-lg text-white bg-[#7A0C23] hover:opacity-90 transition"
+                    @click="closeClusterModal"
+                >
+                    Close
+                </button>
+            </div>
+        </div>
     </div>
 </template>
 

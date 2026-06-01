@@ -9,6 +9,7 @@ defineProps({
     faculty: { type: Array, default: () => [] },
     requesters: { type: Array, default: () => [] },
     currentRequester: { type: String, default: '' },
+    currentUserRole: { type: String, default: '' },
     terms: { type: Array, default: () => [] },
 });
 </script>
@@ -22,6 +23,7 @@ defineProps({
         :faculty="faculty"
         :requesters="requesters"
         :current-requester="currentRequester"
+        :current-user-role="currentUserRole"
         :terms="terms"
     />
 </template>

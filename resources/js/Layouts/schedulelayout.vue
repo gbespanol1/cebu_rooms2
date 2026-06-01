@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watchEffect } from 'vue';
+import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 import { router } from '@inertiajs/vue3';
 
@@ -21,6 +21,7 @@ import {
     demoRoomEquipmentDetailsMap,
     GLOBAL_DEMO_EQUIPMENT_QUANTITIES,
 } from '@/data/demoRoomEquipment.js';
+import { getAppointmentStatusLabel } from '@/utils/scheduleStatus';
 
 const props = defineProps({
     schedules: { type: Array, default: () => [] },
@@ -30,6 +31,7 @@ const props = defineProps({
     faculty: { type: Array, default: () => [] },
     requesters: { type: Array, default: () => [] },
     currentRequester: { type: String, default: '' },
+    currentUserRole: { type: String, default: '' },
     terms: { type: Array, default: () => [] },
 });
 
@@ -312,6 +314,58 @@ const triggerToast = (type, name = '') => {
     }, 3000);
 };
 
+const isAdminAccount = computed(() => String(props.currentUserRole || '').toLowerCase() === 'admin');
+
+const handleStatusUpdate = async ({ event, status, onComplete, onError }) => {
+    if (!isAdminAccount.value || !event?.dbId) {
+        onError?.();
+        return;
+    }
+
+    try {
+        const res = await axios.patch(`/Schedule/${event.dbId}/status`, { status });
+        const updated = dbScheduleToEvent(res.data.schedule);
+        const idx = events.value.findIndex((item) => item.id === event.id);
+        if (idx !== -1) {
+            events.value[idx] = updated;
+        }
+        refreshSchedulesFromServer();
+        window.dispatchEvent(new CustomEvent('appointment-notifications:refresh'));
+        window.dispatchEvent(new CustomEvent('appointment-status:success', {
+            detail: { message: `Appointment status updated to ${getAppointmentStatusLabel(status)}.` },
+        }));
+        onComplete?.();
+    } catch (err) {
+        console.error('Failed to update appointment status:', err);
+        alert(err.response?.data?.message || 'Failed to update status.');
+        onError?.();
+    }
+};
+
+const refreshSchedulesFromServer = () => {
+    router.reload({
+        only: ['schedules'],
+        preserveScroll: true,
+        preserveState: true,
+    });
+};
+
+let schedulePollTimer = null;
+
+onMounted(() => {
+    schedulePollTimer = window.setInterval(refreshSchedulesFromServer, 15000);
+    window.addEventListener('appointment-notifications:refresh', refreshSchedulesFromServer);
+    window.addEventListener('appointment-notification:open', handleNotificationOpen);
+});
+
+onUnmounted(() => {
+    if (schedulePollTimer) {
+        window.clearInterval(schedulePollTimer);
+    }
+    window.removeEventListener('appointment-notifications:refresh', refreshSchedulesFromServer);
+    window.removeEventListener('appointment-notification:open', handleNotificationOpen);
+});
+
 const closeConflictNoticeModal = () => {
     conflictNotice.value = {
         visible: false,
@@ -461,6 +515,8 @@ const handleAppointmentSuccess = async (data) => {
 
         closeModal('appointment');
 
+        window.dispatchEvent(new CustomEvent('appointment-notifications:refresh'));
+
         if (currentView.value === 'calendar') {
             selectEventInCalendar(newEvent);
         }
@@ -565,9 +621,40 @@ const selectEventInCalendar = (event) => {
     openEventViewer(event);
 };
 
+const openAppointmentById = (scheduleId) => {
+    const id = Number(scheduleId);
+    if (!id) return false;
+
+    const event = events.value.find((item) => item.dbId === id || item.id === id);
+    if (!event) return false;
+
+    currentView.value = 'table';
+    openEventViewer(event);
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('appointment')) {
+        url.searchParams.delete('appointment');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    }
+
+    return true;
+};
+
+const handleAppointmentDeepLink = () => {
+    const fromQuery = new URLSearchParams(window.location.search).get('appointment');
+    if (fromQuery) {
+        openAppointmentById(fromQuery);
+    }
+};
+
+const handleNotificationOpen = (event) => {
+    openAppointmentById(event?.detail?.scheduleId);
+};
+
 // Reload events when fresh data arrives from the backend (e.g., after navigation)
 watchEffect(() => {
     events.value = loadEventsFromProps();
+    handleAppointmentDeepLink();
 });
 </script>
 
@@ -618,8 +705,16 @@ watchEffect(() => {
                 </div>
 
                 <!-- Main Content -->
-                <TableComponent v-if="currentView === 'table'" :events="events" @view-details="selectEventInCalendar"
-                    @edit-event="handleEditEvent" @delete-event="handleDeleteEvent" @row-clicked="openEventViewer" />
+                <TableComponent
+                    v-if="currentView === 'table'"
+                    :events="events"
+                    :is-admin="isAdminAccount"
+                    @view-details="openEventViewer"
+                    @edit-event="handleEditEvent"
+                    @delete-event="handleDeleteEvent"
+                    @update-status="handleStatusUpdate"
+                    @row-clicked="openEventViewer"
+                />
 
                 <CalendarView v-else :data="events" :initial-date="currentCalendarDate"
                     :initial-mode="currentCalendarMode" :ListViewComponent="TableComponent"

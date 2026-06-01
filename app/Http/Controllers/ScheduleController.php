@@ -6,15 +6,17 @@ use Carbon\Carbon;
 use App\Models\Room;
 use App\Models\Term;
 use Inertia\Inertia;
-use App\Models\Schedule;
 use App\Models\UserAccount;
+use App\Models\Schedule;
 use App\Services\EquipmentInventoryService;
+use App\Services\ScheduleNotificationService;
 use Illuminate\Http\Request;
 
 class ScheduleController extends Controller
 {
     public function __construct(
-        private readonly EquipmentInventoryService $equipmentInventory
+        private readonly EquipmentInventoryService $equipmentInventory,
+        private readonly ScheduleNotificationService $notificationService
     ) {}
 
     public function index(Request $request)
@@ -40,6 +42,7 @@ class ScheduleController extends Controller
                 $currentUser->last_name,
             ])))
             : ($sessionUsername ?: '');
+        $currentUserRole = strtolower((string) data_get($request->session()->get('user'), 'role', ''));
 
         return Inertia::render('Schedule', [
             'schedules' => $schedules,
@@ -49,6 +52,7 @@ class ScheduleController extends Controller
             'faculty' => $faculty,
             'requesters' => $requesters,
             'currentRequester' => $currentRequester,
+            'currentUserRole' => $currentUserRole,
             'terms' => $terms,
         ]);
     }
@@ -144,6 +148,16 @@ class ScheduleController extends Controller
         $schedule = Schedule::create($payload);
         $schedule->load(['room.building', 'room.college', 'faculty', 'requester', 'term']);
 
+        $currentUser = $this->notificationService->resolveCurrentUser($request);
+        if ($currentUser && !$schedule->requester_id) {
+            $schedule->update(['requester_id' => $currentUser->id]);
+            $schedule->load(['requester']);
+        }
+        $this->notificationService->notifyAdminsOfNewAppointment($schedule, $currentUser);
+        if ($currentUser) {
+            $this->notificationService->notifyBookingConfirmation($schedule, $currentUser);
+        }
+
         return response()->json([
             'success' => true,
             'schedule' => $schedule,
@@ -204,6 +218,46 @@ class ScheduleController extends Controller
 
         return response()->json([
             'success' => true,
+        ]);
+    }
+
+    public function updateStatus(Request $request, Schedule $schedule)
+    {
+        $role = strtolower((string) data_get($request->session()->get('user'), 'role', ''));
+        if ($role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admin accounts can update appointment status.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|string|in:pending,in_progress,approved,completed,rejected,cancelled',
+        ]);
+
+        if (in_array(strtolower((string) $schedule->status), ['completed', 'rejected', 'cancelled'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This appointment is closed and its status can no longer be changed.',
+            ], 422);
+        }
+
+        $schedule->update([
+            'status' => $validated['status'],
+        ]);
+
+        $schedule->load(['room.building', 'room.college', 'faculty', 'requester', 'term']);
+
+        $changedBy = $this->notificationService->resolveCurrentUser($request);
+        $this->notificationService->notifyStatusChangeToAllRoles(
+            $schedule,
+            $validated['status'],
+            $changedBy
+        );
+
+        return response()->json([
+            'success' => true,
+            'schedule' => $schedule,
         ]);
     }
 
