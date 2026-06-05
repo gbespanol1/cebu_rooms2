@@ -151,7 +151,7 @@ watch(search, (val) => {
 <style scoped>
 /* Fixed table layout to prevent movement */
 table {
-  table-layout: fixed;
+  table-layout: auto;
   width: 100%;
 }
 

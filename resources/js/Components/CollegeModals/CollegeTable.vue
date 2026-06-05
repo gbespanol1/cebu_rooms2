@@ -1,7 +1,7 @@
 <template>
   <div class="p-4 bg-white min-h-screen">
     <div class="max-w-7xl mx-auto">
-      <h6 class="font-bold text-l text-[#7A0C23] mt-4">College LIST 📃</h6>
+      <h6 class="font-bold text-l text-[#7A0C23] mt-4">College List 📃</h6>
 
       <!-- Add Button -->
   
@@ -10,13 +10,13 @@
         <IconButton 
           @click="handleAdd" 
           icon="plus" 
-          title="Add Building" 
+          title="Add College" 
           size="md" 
           color="green" 
           outlined
           class="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-yellow-500 transition-colors duration-200"
         >
-          Add Building
+          Add College
         </IconButton>
       </div>
 
@@ -35,8 +35,8 @@
             <tr>
               <th class="px-4 py-3 text-left">College Name</th>
               <th class="px-4 py-3 text-left">Code</th>
-              <th class="px-4 py-3 text-left">Dean</th>
-              <th class="px-4 py-3 text-center">Email</th>
+              <!-- <th class="px-4 py-3 text-left">Dean</th>
+              <th class="px-4 py-3 text-center">Email</th> -->
               <th class="px-4 py-3 text-center">Phone</th>
               <th class="px-4 py-3 text-center">Actions</th>
             </tr>
@@ -52,8 +52,8 @@
             <tr v-for="college in colleges.data" :key="college.id" class=" odd:bg-white even:bg-gray-200 ">
               <td class="px-4 py-3 ">{{ college.college_name ?? 'N/A' }}</td>
               <td class="px-4 py-3">{{ college.college_code ?? 'N/A' }}</td>
-              <td class="px-4 py-3">{{ college.dean?.username ?? 'N/A' }}</td>
-              <td class="px-4 py-3 text-center">{{ college.contact_email ?? 'N/A' }}</td>
+              <!-- <td class="px-4 py-3">{{ college.dean?.username ?? 'N/A' }}</td>
+              <td class="px-4 py-3 text-center">{{ college.contact_email ?? 'N/A' }}</td> -->
               <td class="px-4 py-3 text-center">{{ college.contact_phone ?? 'N/A' }}</td>
               <td class="px-4 py-3">
                 <div class="flex justify-center gap-2">
@@ -153,7 +153,7 @@ watch(search, (val) => {
 <style scoped>
 /* Fixed table layout to prevent movement */
 table {
-  table-layout: fixed;
+  table-layout: auto;
   width: 100%;
 }
 

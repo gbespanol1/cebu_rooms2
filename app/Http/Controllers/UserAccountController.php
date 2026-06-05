@@ -21,6 +21,10 @@ class UserAccountController extends Controller
             ->orderBy('first_name')
             ->paginate(20);
 
+// $users = UserAccount::with(['college', 'department'])->get();
+
+//     dd($users);
+
         // Get colleges and departments for dropdowns
         $colleges = College::select('id', 'college_name')->get();
         $departments = Department::select('id', 'department_name', 'college_id')->get();
