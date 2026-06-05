@@ -8,13 +8,13 @@
         <IconButton 
           @click="handleAdd" 
           icon="plus" 
-          title="Add Building" 
+          title="Add Room Type" 
           size="md" 
           color="green" 
           outlined
           class="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-yellow-500 transition-colors duration-200"
         >
-          Add Building
+          Add Room Type
         </IconButton>
       </div>
 
@@ -151,7 +151,7 @@ watch(search, (val) => {
 <style scoped>
 /* Fixed table layout to prevent movement */
 table {
-  table-layout: fixed;
+  table-layout: auto;
   width: 100%;
 }
 
