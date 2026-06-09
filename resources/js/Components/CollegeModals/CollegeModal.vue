@@ -24,7 +24,7 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">College Name</label>
                         <input type="text" v-model="formCollege.college_name" class="mt-1 w-full border rounded-md p-3"
-                            :readonly="type === 'view'" placeholder="college Name" />
+                            :readonly="type === 'view'" placeholder="College Name" />
                     </div>
 
                     <div>
@@ -56,7 +56,8 @@
                         <label class="block text-sm font-medium text-gray-700">Dean</label>
                         <select v-model="formCollege.dean_id" class="mt-1 w-full border rounded-md p-2"
                             :disabled="type === 'view'">
-                            <option value="" disabled>Select Dean</option>
+                            // <option value="" disabled>Select Dean</option>
+                            <option :value="null">No Dean Assigned</option>
                             <option v-for="d in dean" :key="d.id" :value="d.id">
                                 {{ d.username }}
                             </option>
@@ -123,7 +124,7 @@ watch(localFlash, (val) => {
 })
 
 const formCollege = useForm({
-    dean_id: 1,
+    dean_id: null,
     college_name: '',
     college_code: '',
     description: '',
@@ -157,7 +158,7 @@ watch(
 
         if (type === 'add') {
             formCollege.reset({
-                dean_id: 1,
+                dean_id: null,
                 college_name: '',
                 college_code: '',
                 description: '',

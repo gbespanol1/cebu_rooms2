@@ -110,12 +110,14 @@ const addUser = async (newUser) => {
         const formData = {
             username: newUser.username,
             email: newUser.email,
-            password: newUser.password,
+            // password: newUser.password,
+            password: newUser.password || 'password123',
             first_name: newUser.first_name,
             last_name: newUser.last_name,
             middle_name: newUser.middle_name || '',
             employee_id: newUser.username, // Using username as employee_id for simplicity
-            user_type: newUser.role,
+            // user_type: newUser.role,
+            user_type: newUser.role || 'faculty', // Default to 'faculty' if role is not provided
             account_status: 'active',
             college_id: college ? college.id : null,
             department_id: department ? department.id : null,
@@ -459,7 +461,8 @@ onMounted(() => {
         <Navbar @toggle-sidebar="toggleSidebar" />
 
         <div class="flex pt-10 min-h-screen transition-all duration-300">
-            <Sidebar v-show="sidebarVisible" class="fixed top-5 left-0 h-full z-20 w-64 lg:relative" />
+            <!-- <Sidebar v-show="sidebarVisible" class="fixed top-5 left-0 h-full z-20 w-64 lg:relative" /> -->
+             <Sidebar  :sidebarOpen="sidebarVisible" class="fixed top-5 left-0 h-full z-20 w-64 lg:relative"/>
 
             <main id="main" class="flex-1 overflow-y-auto p-0 md:p-6 bg-gray-200">
                 <UserAccountTable

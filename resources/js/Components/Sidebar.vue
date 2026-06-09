@@ -12,14 +12,14 @@
           'bg-gray-100 font-semibold text-gray-800': isBuildingOpen,
           'text-black hover:bg-[#9c1b33] hover:text-white': !isBuildingOpen
         }">
-        <span>Build & Equip.</span>
+        <span>Building & Equip.</span>
         <svg :class="{ 'rotate-90': isBuildingOpen }" class="w-4 h-4 transform transition-transform duration-300"
           fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
         </svg>
       </div>
 
-      <div v-if="canAccessBuildings" v-show="isBuildingOpen" class="pl-4 space-y-1 transition-all duration-300 overflow-hidden">
+      <div v-show="isBuildingOpen" class="pl-4 space-y-1 transition-all duration-300 overflow-hidden">
         <a href="/BuildingDashboard"
           class="block px-4 py-2 hover:bg-[#9c1b33] hover:text-white rounded transition duration-150">Building</a>
         <a href="/equipment"
@@ -42,10 +42,11 @@
 
       <div v-if="canAccessCollege" v-show="isCollegeOpen" class="pl-4 space-y-1 transition-all duration-300 overflow-hidden">
         <a href="/CollegeDashboard"
-          class="block px-4 py-2 hover:bg-[#9c1b33] hover:text-white rounded transition duration-150">College
-          Dashboard</a>
+          :class="isActive('/CollegeDashboard') ? 'bg-[#9c1b33] text-white font-semibold' : 'hover:bg-[#9c1b33] hover:text-white'"
+          class="block px-4 py-2 rounded transition duration-150">College</a>
         <a href="/Departments"
-          class="block px-4 py-2 hover:bg-[#9c1b33] hover:text-white rounded transition duration-150">Departments</a>
+          :class="isActive('/Departments') ? 'bg-[#9c1b33] text-white font-semibold' : 'hover:bg-[#9c1b33] hover:text-white'"
+          class="block px-4 py-2 rounded transition duration-150">Departments</a>
       </div>
 
       <hr v-if="canAccessCollege && canAccessRooms" class="border-gray-100 my-1">
@@ -55,7 +56,7 @@
           'bg-gray-100 font-semibold text-gray-800': isRoomsOpen,
           'text-black hover:bg-[#9c1b33] hover:text-white': !isRoomsOpen
         }">
-        <span>Room Management.</span>
+        <span>Room Management</span>
         <svg :class="{ 'rotate-90': isRoomsOpen }" class="w-4 h-4 transform transition-transform duration-300" fill="none"
           stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
@@ -64,9 +65,15 @@
 
       <div v-if="canAccessRooms" v-show="isRoomsOpen" class="pl-4 space-y-1 transition-all duration-300 overflow-hidden">
         <a href="/Rooms"
+          :class="isActive('/Rooms') ? 'bg-[#9c1b33] text-white font-semibold' : 'hover:bg-[#9c1b33] hover:text-white'"
+          class="block px-4 py-2 rounded transition duration-150">Rooms</a>
+        <a href="/RoomTypes"
+          :class="isActive('/RoomTypes') ? 'bg-[#9c1b33] text-white font-semibold' : 'hover:bg-[#9c1b33] hover:text-white'"
+          class="block px-4 py-2 rounded transition duration-150">Room Types</a>
+        <!-- <a href="/Rooms"
           class="block px-4 py-2 hover:bg-[#9c1b33] hover:text-white rounded transition duration-150">Rooms</a>
         <a href="/RoomTypes"
-          class="block px-4 py-2 hover:bg-[#9c1b33] hover:text-white rounded transition duration-150">Room Types</a>
+          class="block px-4 py-2 hover:bg-[#9c1b33] hover:text-white rounded transition duration-150">Room Types</a> -->
       </div>
 
       <hr v-if="canAccessRooms && (canAccessUsers || canAccessSchedule || canAccessTerms)" class="border-gray-200 my-2">
@@ -93,8 +100,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { router, usePage } from '@inertiajs/vue3';
+import { ref, onMounted } from 'vue';
+import { router } from '@inertiajs/vue3';
 
 const props = defineProps({
   sidebarOpen: {

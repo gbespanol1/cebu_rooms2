@@ -133,6 +133,7 @@ const handleAddAccount = () => {
     emit('openModal', 'add');
 };
 
+
 const handleView = (user) => {
     emit('openModal', 'view', user);
 };
@@ -218,13 +219,13 @@ onMounted(() => {
         <IconButton 
           @click="handleAddAccount" 
           icon="plus" 
-          title="Add User" 
+          title="Add User Account" 
           size="md" 
           color="green" 
           outlined
           class="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-yellow-500 transition-colors duration-200"
         >
-          Add User
+          Add User Account
         </IconButton>
       </div>
         </div>
