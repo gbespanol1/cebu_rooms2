@@ -100,8 +100,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { computed, ref, onMounted } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
 
 const props = defineProps({
   sidebarOpen: {
@@ -115,6 +115,8 @@ const props = defineProps({
 });
 
 const page = usePage();
+
+const isActive = (path) => page.url.split(/[?#]/)[0] === path;
 
 const currentUser = computed(() => props.user ?? page.props.auth?.user ?? null);
 
